@@ -1,0 +1,24 @@
+# Telegram Bot
+python-telegram-bot[ext]==20.7
+
+# AI APIs
+openai==1.12.0
+anthropic==0.18.0
+
+# MongoDB and ODM
+motor==3.3.2
+beanie==1.24.0
+
+# Configuration Management
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# Logging
+structlog==24.1.0
+
+# Retry Logic
+tenacity==8.2.3
+
+# Utilities
+python-dateutil==2.8.2
