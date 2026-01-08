@@ -15,7 +15,7 @@ setup_logging()
 logger = structlog.get_logger()
 
 
-async def startup():
+async def startup(application):
     """Initialize connections and services."""
     logger.info("Starting Hermes Bot...")
 
@@ -33,7 +33,7 @@ async def startup():
     logger.info("Startup complete")
 
 
-async def shutdown():
+async def shutdown(application):
     """Cleanup connections and services."""
     logger.info("Shutting down Hermes Bot...")
     await MongoDB.close()
