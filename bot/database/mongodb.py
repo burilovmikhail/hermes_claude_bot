@@ -5,6 +5,7 @@ from beanie import init_beanie
 from bot.models.user import User
 from bot.models.conversation import Conversation
 from bot.models.message import Message
+from bot.models.repository import Repository
 
 logger = structlog.get_logger()
 
@@ -32,7 +33,7 @@ class MongoDB:
             # Initialize Beanie with document models
             await init_beanie(
                 database=cls.database,
-                document_models=[User, Conversation, Message],
+                document_models=[User, Conversation, Message, Repository],
             )
 
             logger.info("Successfully connected to MongoDB", database=database_name)

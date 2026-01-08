@@ -1,0 +1,13 @@
+# Redis
+redis==5.0.1
+
+# Configuration Management
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# Logging
+structlog==24.1.0
+
+# Anthropic API (for Claude Code)
+anthropic==0.18.0

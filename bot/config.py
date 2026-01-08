@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     jira_email: str
     jira_api_token: str
 
+    # GitHub Configuration
+    github_token: str
+
+    # Redis Configuration
+    redis_url: str = "redis://redis:6379/0"
+
     # MongoDB Configuration
     mongodb_uri: str
 

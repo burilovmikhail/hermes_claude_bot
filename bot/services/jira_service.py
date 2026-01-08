@@ -86,6 +86,88 @@ class JiraService:
             )
             raise Exception(f"Network error: {str(e)}")
 
+    async def get_issue_with_comments(self, issue_key: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch issue details including comments from Jira.
+
+        Args:
+            issue_key: Jira issue key (e.g., "MS-1234")
+
+        Returns:
+            Dictionary with issue details and comments or None if not found
+        """
+        # First get the issue
+        issue = await self.get_issue(issue_key)
+        if not issue:
+            return None
+
+        # Now get comments
+        url = f"{self.jira_url}/rest/api/3/issue/{issue_key}/comment"
+
+        headers = {
+            "Authorization": f"Basic {self.auth_header}",
+            "Accept": "application/json",
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        comments = self._format_comments(data.get("comments", []))
+                        issue["comments"] = comments
+                        logger.info(
+                            "Successfully fetched Jira issue with comments",
+                            issue_key=issue_key,
+                            comment_count=len(comments),
+                        )
+                        return issue
+                    else:
+                        # If comments fail, still return the issue
+                        logger.warning(
+                            "Failed to fetch comments, returning issue without comments",
+                            issue_key=issue_key,
+                            status=response.status,
+                        )
+                        issue["comments"] = []
+                        return issue
+
+        except aiohttp.ClientError as e:
+            logger.warning(
+                "Network error fetching comments, returning issue without comments",
+                issue_key=issue_key,
+                error=str(e),
+            )
+            issue["comments"] = []
+            return issue
+
+    def _format_comments(self, raw_comments: list) -> list[Dict[str, Any]]:
+        """
+        Format raw Jira comments into a cleaner structure.
+
+        Args:
+            raw_comments: Raw comments from Jira API
+
+        Returns:
+            List of formatted comments
+        """
+        formatted_comments = []
+
+        for comment in raw_comments:
+            author = comment.get("author", {})
+            author_name = author.get("displayName", "Unknown")
+
+            # Extract comment body (may be ADF format)
+            body = self._extract_description(comment.get("body"))
+
+            formatted_comments.append({
+                "author": author_name,
+                "created": comment.get("created", ""),
+                "body": body
+            })
+
+        return formatted_comments
+
     def _format_issue(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Format raw Jira API response into a cleaner structure.
