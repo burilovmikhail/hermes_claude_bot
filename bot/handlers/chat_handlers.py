@@ -8,6 +8,7 @@ from bot.services.claude_service import ClaudeService
 from bot.services.conversation_service import ConversationService
 from bot.models.message import MessageRole
 from bot.config import settings
+from bot.utils.auth import authorized_users_only
 
 logger = structlog.get_logger()
 
@@ -119,6 +120,7 @@ async def _process_chat_message(
         )
 
 
+@authorized_users_only
 async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle /chat command (default provider).
@@ -130,6 +132,7 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@authorized_users_only
 async def chat_gpt_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle /chat_gpt command (OpenAI).
@@ -138,6 +141,7 @@ async def chat_gpt_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _process_chat_message(update, context, message_text, "openai")
 
 
+@authorized_users_only
 async def chat_claude_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle /chat_claude command (Anthropic Claude).

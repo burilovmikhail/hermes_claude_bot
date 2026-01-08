@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     # Telegram Bot Configuration
     telegram_api_key: str
+    allowed_user_id: int
 
     # AI Provider API Keys
     openai_api_key: str

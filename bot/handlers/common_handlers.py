@@ -6,10 +6,12 @@ from telegram.ext import ContextTypes
 from bot.models.user import User
 from bot.services.conversation_service import ConversationService
 from bot.config import settings
+from bot.utils.auth import authorized_users_only
 
 logger = structlog.get_logger()
 
 
+@authorized_users_only
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle /start command.
@@ -56,6 +58,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_message)
 
 
+@authorized_users_only
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command."""
     user = update.effective_user
@@ -82,6 +85,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_message)
 
 
+@authorized_users_only
 async def new_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle /new command.
