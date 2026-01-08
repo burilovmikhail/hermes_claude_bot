@@ -8,6 +8,7 @@ from bot.database.mongodb import MongoDB
 from bot.utils.logger import setup_logging
 from bot.handlers.common_handlers import start_handler, help_handler, new_handler
 from bot.handlers.chat_handlers import chat_handler, chat_gpt_handler, chat_claude_handler
+from bot.handlers.ticket_handlers import ticket_handler
 from bot.handlers.error_handlers import error_handler
 
 # Setup logging
@@ -51,6 +52,7 @@ def main():
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("help", help_handler))
     application.add_handler(CommandHandler("new", new_handler))
+    application.add_handler(CommandHandler("ticket", ticket_handler))
     application.add_handler(CommandHandler("chat_gpt", chat_gpt_handler))
     application.add_handler(CommandHandler("chat_claude", chat_claude_handler))
     application.add_handler(CommandHandler("chat", chat_handler))

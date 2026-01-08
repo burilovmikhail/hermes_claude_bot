@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # AI Provider API Keys
     openai_api_key: str
     anthropic_api_key: str
+    claude_model: str = "claude-3-5-sonnet-20250122"
+
+    # Jira Configuration
+    jira_url: str
+    jira_email: str
+    jira_api_token: str
 
     # MongoDB Configuration
     mongodb_uri: str

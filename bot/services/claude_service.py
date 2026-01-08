@@ -11,13 +11,13 @@ logger = structlog.get_logger()
 class ClaudeService(AIService):
     """Anthropic Claude service implementation."""
 
-    def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022"):
+    def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20250122"):
         """
         Initialize Claude service.
 
         Args:
             api_key: Anthropic API key
-            model: Model to use (default: claude-3-5-sonnet-20241022)
+            model: Model to use (default: claude-3-5-sonnet-20250122)
         """
         super().__init__(api_key)
         self.client = AsyncAnthropic(api_key=api_key)

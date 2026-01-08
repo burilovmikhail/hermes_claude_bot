@@ -23,3 +23,6 @@ tenacity==8.2.3
 
 # Utilities
 python-dateutil==2.8.2
+
+# HTTP Client (for Jira API)
+aiohttp==3.9.1

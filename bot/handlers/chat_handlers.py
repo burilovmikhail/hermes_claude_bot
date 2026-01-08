@@ -63,7 +63,10 @@ async def _process_chat_message(
         if provider == "openai":
             ai_service = OpenAIService(api_key=settings.openai_api_key)
         elif provider == "claude":
-            ai_service = ClaudeService(api_key=settings.anthropic_api_key)
+            ai_service = ClaudeService(
+                api_key=settings.anthropic_api_key,
+                model=settings.claude_model
+            )
         else:
             await update.message.reply_text(f"Unknown provider: {provider}")
             return
