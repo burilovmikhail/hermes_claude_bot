@@ -17,15 +17,24 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 # Add uv to PATH
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install Claude Code CLI (official method)
+# Create a non-root user to run the worker
+RUN useradd -m -u 1000 -s /bin/bash worker && \
+    mkdir -p /home/worker/.config/claude-code && \
+    mkdir -p /workspace && \
+    chown -R worker:worker /home/worker /workspace
+
+# Switch to worker user to install Claude Code
+USER worker
+
+# Install Claude Code CLI as worker user (official method)
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Add Claude Code to PATH and set CLAUDE_CODE_PATH
-ENV PATH="/root/.local/bin:${PATH}"
-ENV CLAUDE_CODE_PATH="/root/.local/bin/claude"
+ENV PATH="/home/worker/.local/bin:${PATH}"
+ENV CLAUDE_CODE_PATH="/home/worker/.local/bin/claude"
 
-# Create Claude Code config directory
-RUN mkdir -p /root/.config/claude-code
+# Switch back to root for remaining setup
+USER root
 
 # Set working directory
 WORKDIR /app
@@ -45,11 +54,15 @@ COPY adws /app/adws
 COPY worker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Create workspace directory
-RUN mkdir -p /workspace
+# Change ownership of app directory to worker user
+RUN chown -R worker:worker /app
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
+ENV HOME=/home/worker
+
+# Switch to non-root user
+USER worker
 
 # Use entrypoint script to configure Claude Code at runtime
 ENTRYPOINT ["/entrypoint.sh"]

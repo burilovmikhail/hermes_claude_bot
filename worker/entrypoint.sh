@@ -4,7 +4,8 @@ set -e
 # Create Claude Code settings.json with API key from environment
 if [ -n "$ANTHROPIC_API_KEY" ]; then
     echo "Configuring Claude Code with API key..."
-    cat > /root/.config/claude-code/settings.json <<EOF
+    mkdir -p "$HOME/.config/claude-code"
+    cat > "$HOME/.config/claude-code/settings.json" <<EOF
 {
   "apiKeyHelper": {
     "type": "env",
@@ -24,6 +25,7 @@ fi
 # Verify Claude Code is available
 if command -v claude &> /dev/null; then
     echo "Claude Code found at: $(which claude)"
+    echo "Running as user: $(whoami)"
 else
     echo "WARNING: Claude Code not found in PATH!"
 fi
