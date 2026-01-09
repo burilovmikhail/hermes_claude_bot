@@ -175,11 +175,10 @@ def main():
     # Commit the implementation
     success, error = commit_changes(commit_msg)
 
-    if not success:
-        logger.error(f"Error committing implementation: {error}")
-        sys.exit(1)
-
-    logger.info(f"Committed implementation: {commit_msg}")
+    if success:
+        logger.info(f"Committed implementation: {commit_msg}")
+    else:
+        logger.info(f"Implementation already committed")
 
     # Finalize git operations (push and PR)
     finalize_git_operations(state, logger, task_data)

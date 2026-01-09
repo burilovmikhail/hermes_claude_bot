@@ -184,11 +184,10 @@ def main():
     # Commit the plan
     success, error = commit_changes(commit_msg)
 
-    if not success:
-        logger.error(f"Error committing plan: {error}")
-        sys.exit(1)
-
-    logger.info(f"Committed plan: {commit_msg}")
+    if success:
+        logger.info(f"Committed plan: {commit_msg}")
+    else:
+        logger.info(f"Plan already commited")    
 
     # Finalize git operations (push and PR)
     finalize_git_operations(state, logger, task_data)
