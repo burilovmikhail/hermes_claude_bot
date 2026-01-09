@@ -24,11 +24,15 @@ RUN curl -fsSL https://raw.githubusercontent.com/anthropics/claude-code/main/ins
 WORKDIR /app
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
+# Note: Build context is project root, so we reference worker/requirements.txt
+COPY worker/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy worker code
-COPY . .
+COPY worker/ .
+
+# Copy ADW scripts from project root
+COPY adws /app/adws
 
 # Create workspace directory
 RUN mkdir -p /workspace

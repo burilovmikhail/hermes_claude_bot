@@ -55,8 +55,8 @@ services:
 
   worker:
     build:
-      context: ./worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: hermes_worker
     restart: unless-stopped
     env_file:

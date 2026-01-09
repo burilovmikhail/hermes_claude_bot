@@ -203,10 +203,17 @@ class WorkerService:
             telegram_id: User's Telegram ID
         """
         try:
-            # Get the Hermes ADW scripts directory
-            # Assuming worker is running from Hermes root or worker subdirectory
-            hermes_root = Path(__file__).parent.parent
-            adws_source = hermes_root / "adws"
+            # Get the ADW scripts directory
+            # In Docker: /app/adws (copied during build)
+            # In development: ../adws relative to worker directory
+            worker_dir = Path(__file__).parent
+
+            # Try Docker location first
+            adws_source = worker_dir / "adws"
+
+            # If not found, try development location (parent directory)
+            if not adws_source.exists():
+                adws_source = worker_dir.parent / "adws"
 
             if not adws_source.exists():
                 raise FileNotFoundError(f"ADW scripts not found at: {adws_source}")
