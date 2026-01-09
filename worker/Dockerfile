@@ -17,8 +17,15 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 # Add uv to PATH
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install Claude Code CLI
-RUN curl -fsSL https://raw.githubusercontent.com/anthropics/claude-code/main/install.sh | sh
+# Install Claude Code CLI (official method)
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Add Claude Code to PATH and set CLAUDE_CODE_PATH
+ENV PATH="/root/.local/bin:${PATH}"
+ENV CLAUDE_CODE_PATH="/root/.local/bin/claude"
+
+# Create Claude Code config directory
+RUN mkdir -p /root/.config/claude-code
 
 # Set working directory
 WORKDIR /app
@@ -34,11 +41,15 @@ COPY worker/ .
 # Copy ADW scripts from project root
 COPY adws /app/adws
 
+# Copy and set up entrypoint script
+COPY worker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Create workspace directory
 RUN mkdir -p /workspace
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Run worker
-CMD ["python", "main.py"]
+# Use entrypoint script to configure Claude Code at runtime
+ENTRYPOINT ["/entrypoint.sh"]

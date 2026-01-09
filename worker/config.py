@@ -20,8 +20,9 @@ class WorkerSettings(BaseSettings):
     # Anthropic API Key (for Claude Code)
     anthropic_api_key: str
 
-    # Claude Model
+    # Claude Code Configuration
     claude_model: str = "claude-3-5-sonnet-20250122"
+    claude_code_path: str = "claude"  # Will use PATH or CLAUDE_CODE_PATH env var
 
     # Workspace Configuration
     workspace_dir: str = "/workspace"
