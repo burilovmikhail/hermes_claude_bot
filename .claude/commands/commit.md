@@ -25,7 +25,7 @@ issue: $3
 ## Run
 
 1. Run `git diff HEAD` to understand what changes have been made
-2. Run `git add -A` to stage all changes
+2. Run `git add -A -- . ':!agents/'` to stage all changes except agents/ directory
 3. Run `git commit -m "<generated_commit_message>"` to create the commit
 
 ## Report

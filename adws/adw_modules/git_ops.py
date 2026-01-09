@@ -76,39 +76,15 @@ def create_branch(branch_name: str) -> Tuple[bool, Optional[str]]:
 
 def commit_changes(message: str) -> Tuple[bool, Optional[str]]:
     """Stage all changes and commit. Returns (success, error_message)."""
-    import os
-
     # Check if there are changes to commit
     result = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
     if not result.stdout.strip():
         return True, None  # No changes to commit
 
-    # Get list of all changed files excluding agents/ directory
-    status_lines = result.stdout.strip().split('\n')
-    files_to_add = []
-
-    for line in status_lines:
-        if not line.strip():
-            continue
-        # Parse git status output (format: "XY filename")
-        # Skip files in agents/ directory
-        file_path = line[3:].strip()  # Remove status code and space
-        if not file_path.startswith('agents/'):
-            files_to_add.append(file_path)
-
-    if not files_to_add:
-        return True, None  # No non-agent files to commit
-
-    # Stage files individually (excluding agents/)
-    for file_path in files_to_add:
-        result = subprocess.run(
-            ["git", "add", file_path],
-            capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            # If file was deleted, use git rm instead
-            if not os.path.exists(file_path):
-                subprocess.run(["git", "rm", file_path], capture_output=True, text=True)
+    # Stage all changes (excluding agents/ via pathspec)
+    result = subprocess.run(["git", "add", "-A", "--", ".", ":!agents/"], capture_output=True, text=True)
+    if result.returncode != 0:
+        return False, result.stderr
 
     # Commit
     result = subprocess.run(
