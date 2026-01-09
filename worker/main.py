@@ -195,7 +195,7 @@ class WorkerService:
         telegram_id: int
     ):
         """
-        Copy ADW scripts from Hermes to target repository.
+        Copy ADW scripts from Hermes to target repository and install dependencies.
 
         Args:
             repo_dir: Target repository directory
@@ -222,6 +222,22 @@ class WorkerService:
             shutil.copytree(adws_source, adws_target)
 
             logger.info("Copied ADW scripts", source=str(adws_source), target=str(adws_target))
+
+            # Install ADW dependencies in the target repository
+            adw_requirements = adws_target / "requirements.txt"
+            if adw_requirements.exists():
+                logger.info("Installing ADW dependencies")
+                result = subprocess.run(
+                    ["pip", "install", "-q", "-r", str(adw_requirements)],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode != 0:
+                    logger.warning(f"Failed to install ADW dependencies: {result.stderr}")
+                    # Don't raise - dependencies might already be installed
+                else:
+                    logger.info("ADW dependencies installed successfully")
 
         except Exception as e:
             logger.error("Failed to copy ADW scripts", error=str(e))
