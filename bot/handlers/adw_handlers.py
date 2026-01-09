@@ -10,6 +10,7 @@ from bot.services.jira_service import JiraService
 from bot.services.redis_service import RedisService
 from bot.config import settings
 from bot.utils.auth import authorized_users_only
+from bot.models.repository import Repository
 
 logger = structlog.get_logger()
 
@@ -24,17 +25,90 @@ def set_redis_service(service: RedisService):
     redis_service = service
 
 
+async def resolve_repository(
+    telegram_id: int,
+    parsed: dict
+) -> tuple[str | None, str | None]:
+    """
+    Resolve repository URL from parsed command data.
+
+    Priority:
+    1. Explicit github_repo (owner/repo format)
+    2. Repository alias lookup
+    3. Jira prefix lookup
+
+    Args:
+        telegram_id: User's Telegram ID
+        parsed: Parsed ADW command data
+
+    Returns:
+        Tuple of (repo_url, error_message). repo_url is None if not found.
+    """
+    # 1. If explicit GitHub repo provided, use it
+    if parsed.get("github_repo"):
+        return parsed["github_repo"], None
+
+    # 2. Try repo alias
+    if parsed.get("repo_alias"):
+        repo = await Repository.find_one(
+            Repository.telegram_id == telegram_id,
+            Repository.short_name == parsed["repo_alias"]
+        )
+        if repo:
+            logger.info(
+                "Resolved repository by alias",
+                alias=parsed["repo_alias"],
+                repo_url=repo.repo_url
+            )
+            return repo.repo_url, None
+        else:
+            return None, (
+                f"Repository alias '{parsed['repo_alias']}' not found. "
+                "Use /git list to see your repositories."
+            )
+
+    # 3. Try Jira prefix
+    if parsed.get("jira_prefix"):
+        repo = await Repository.find_one(
+            Repository.telegram_id == telegram_id,
+            Repository.jira_prefix == parsed["jira_prefix"]
+        )
+        if repo:
+            logger.info(
+                "Resolved repository by Jira prefix",
+                jira_prefix=parsed["jira_prefix"],
+                repo_url=repo.repo_url
+            )
+            return repo.repo_url, None
+        else:
+            return None, (
+                f"No repository found for Jira prefix '{parsed['jira_prefix']}'. "
+                f"Please specify the repository using 'in the <alias> repo' or register it with /git add."
+            )
+
+    return None, "Could not resolve repository"
+
+
 @authorized_users_only
 async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle /adw command (AI-Driven Workflow).
 
-    Parses the command, fetches Jira details if needed, and sends task to worker.
+    Parses the command, resolves repository, fetches Jira details if needed,
+    and sends task to worker.
 
-    Usage: /adw [workflow:name] [repo:owner/repo] <task description> [JIRA-123]
+    Usage: /adw [workflow:name] in the <alias> repo <task description> [JIRA-123]
+
     Examples:
+      /adw in the bot repo implement git list command
+      /adw in the ms-backend repo fix the MS-113 issue
+      /adw workflow:plan_build in backend repo add authentication
       /adw repo:myorg/myrepo Fix the login bug MS-1234
-      /adw workflow:build_test repo:myorg/myrepo Implement new feature
+
+    Repository resolution:
+      1. Explicit: repo:owner/repo format
+      2. Alias: "in the <alias> repo" (must be registered with /git add)
+      3. Jira prefix: If JIRA-123 is provided, finds repo by prefix "JIRA"
     """
     user = update.effective_user
     telegram_id = user.id
@@ -72,6 +146,12 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"Invalid command: {error_msg}")
             return
 
+        # Resolve repository
+        repo_url, repo_error = await resolve_repository(telegram_id, parsed)
+        if not repo_url:
+            await update.message.reply_text(f"❌ {repo_error}")
+            return
+
         # Generate task ID
         task_id = str(uuid.uuid4())
 
@@ -80,7 +160,7 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "task_id": task_id,
             "telegram_id": telegram_id,
             "workflow_name": parsed["workflow_name"],
-            "github_repo": parsed["github_repo"],
+            "repo_url": repo_url,  # Use resolved repo_url instead of github_repo
             "task_description": parsed["task_description"],
             "jira_ticket": parsed["jira_ticket"],
             "jira_details": None,
@@ -133,12 +213,10 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"",
                     f"*Task ID:* `{task_id}`",
                     f"*Workflow:* {task_data['workflow_name']}",
+                    f"*Repository:* {task_data['repo_url']}",
                 ]
 
-                if task_data["github_repo"]:
-                    response_parts.append(f"*Repository:* {task_data['github_repo']}")
-
-                if task_data["jira_ticket"]:
+                if task_data.get("jira_ticket"):
                     response_parts.append(f"*Jira Ticket:* {task_data['jira_ticket']}")
 
                 response_parts.extend([

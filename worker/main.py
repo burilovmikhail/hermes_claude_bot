@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import structlog
+import shutil
 from pathlib import Path
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -100,9 +101,10 @@ class WorkerService:
         """
         task_id = task_data.get("task_id")
         telegram_id = task_data.get("telegram_id")
-        workflow_name = task_data.get("workflow_name", "plan_build_test")
-        github_repo = task_data.get("github_repo")
+        workflow_name = task_data.get("workflow_name", "plan_build")
+        repo_url = task_data.get("repo_url")
         task_description = task_data.get("task_description")
+        jira_ticket = task_data.get("jira_ticket")
         jira_details = task_data.get("jira_details")
 
         logger.info("Processing ADW task", task_id=task_id, workflow=workflow_name)
@@ -116,45 +118,63 @@ class WorkerService:
                 f"Starting workflow: {workflow_name}"
             )
 
-            # Prepare workspace for this task
-            task_workspace = self.workspace / task_id
-            task_workspace.mkdir(parents=True, exist_ok=True)
+            # Prepare workspace for this task (use telegram_id subdirectory)
+            user_workspace = self.workspace / str(telegram_id)
+            user_workspace.mkdir(parents=True, exist_ok=True)
 
-            # Clone or update repository if specified
-            if github_repo:
-                repo_dir = await self.setup_repository(
-                    github_repo,
-                    task_workspace,
-                    task_id,
-                    telegram_id
-                )
-            else:
-                repo_dir = task_workspace
+            # Determine repository directory name
+            repo_name = repo_url.split("/")[-1].replace(".git", "")
+            repo_dir = user_workspace / repo_name
 
-            # TODO: Run Claude Code workflow
-            # For now, just simulate workflow execution
+            # Clone or update repository
+            repo_dir = await self.setup_repository(
+                repo_url,
+                user_workspace,
+                task_id,
+                telegram_id
+            )
+
             await self.send_status(
                 task_id,
                 telegram_id,
                 "progress",
-                "Repository setup complete. Running workflow..."
+                "Repository setup complete. Copying ADW scripts..."
             )
 
-            # Placeholder for Claude Code execution
-            # In a real implementation, you would:
-            # 1. Install claude-code if not already installed
-            # 2. Prepare the prompt with task description and Jira details
-            # 3. Execute: claude-code --prompt "..." --workspace repo_dir
-            # 4. Stream output and send progress updates
+            # Copy ADW scripts to target repository
+            await self.copy_adw_scripts(repo_dir, task_id, telegram_id)
 
-            await asyncio.sleep(2)  # Simulate work
+            # Prepare task input file
+            await self.prepare_task_input(
+                repo_dir,
+                task_id,
+                task_description,
+                jira_ticket,
+                jira_details,
+                telegram_id
+            )
+
+            await self.send_status(
+                task_id,
+                telegram_id,
+                "progress",
+                f"Running ADW workflow: {workflow_name}..."
+            )
+
+            # Execute ADW workflow
+            await self.execute_adw_workflow(
+                repo_dir,
+                task_id,
+                workflow_name,
+                telegram_id
+            )
 
             # Send finished status
             await self.send_status(
                 task_id,
                 telegram_id,
                 "finished",
-                f"Workflow completed successfully!\n\nWorkspace: {repo_dir}"
+                f"✅ Workflow completed successfully!\n\nRepository: {repo_url}\nWorkspace: {repo_dir}"
             )
 
             logger.info("Task completed", task_id=task_id)
@@ -165,8 +185,194 @@ class WorkerService:
                 task_id,
                 telegram_id,
                 "failed",
-                f"Workflow failed: {str(e)}"
+                f"❌ Workflow failed: {str(e)}"
             )
+
+    async def copy_adw_scripts(
+        self,
+        repo_dir: Path,
+        task_id: str,
+        telegram_id: int
+    ):
+        """
+        Copy ADW scripts from Hermes to target repository.
+
+        Args:
+            repo_dir: Target repository directory
+            task_id: Task identifier
+            telegram_id: User's Telegram ID
+        """
+        try:
+            # Get the Hermes ADW scripts directory
+            # Assuming worker is running from Hermes root or worker subdirectory
+            hermes_root = Path(__file__).parent.parent
+            adws_source = hermes_root / "adws"
+
+            if not adws_source.exists():
+                raise FileNotFoundError(f"ADW scripts not found at: {adws_source}")
+
+            # Target ADW directory in repository
+            adws_target = repo_dir / "adws"
+
+            # Remove existing ADW directory if present
+            if adws_target.exists():
+                shutil.rmtree(adws_target)
+
+            # Copy ADW scripts
+            shutil.copytree(adws_source, adws_target)
+
+            logger.info("Copied ADW scripts", source=str(adws_source), target=str(adws_target))
+
+        except Exception as e:
+            logger.error("Failed to copy ADW scripts", error=str(e))
+            raise
+
+    async def prepare_task_input(
+        self,
+        repo_dir: Path,
+        task_id: str,
+        task_description: str,
+        jira_ticket: str | None,
+        jira_details: dict | None,
+        telegram_id: int
+    ):
+        """
+        Prepare task input file for ADW workflow.
+
+        Creates a JSON file with task details that will be read by ADW scripts.
+
+        Args:
+            repo_dir: Target repository directory
+            task_id: Task identifier
+            task_description: Task description text
+            jira_ticket: Optional Jira ticket key
+            jira_details: Optional Jira ticket details
+            telegram_id: User's Telegram ID
+        """
+        try:
+            # Determine task title
+            if jira_details:
+                task_title = jira_details.get("summary", "Task")
+            else:
+                # Extract first line or first 50 chars as title
+                task_title = task_description.split("\n")[0][:50]
+
+            # Prepare task input data
+            task_input = {
+                "task_id": task_id,
+                "source": "jira" if jira_ticket else "plain_text",
+                "jira_ticket": jira_ticket,
+                "jira_details": jira_details,
+                "title": task_title,
+                "description": task_description,
+                "telegram_id": telegram_id
+            }
+
+            # Write task input file
+            task_input_file = repo_dir / "adws" / "task_input.json"
+            with open(task_input_file, "w") as f:
+                json.dump(task_input, f, indent=2)
+
+            logger.info("Prepared task input", file=str(task_input_file))
+
+        except Exception as e:
+            logger.error("Failed to prepare task input", error=str(e))
+            raise
+
+    async def execute_adw_workflow(
+        self,
+        repo_dir: Path,
+        task_id: str,
+        workflow_name: str,
+        telegram_id: int
+    ):
+        """
+        Execute ADW workflow script.
+
+        Args:
+            repo_dir: Target repository directory
+            task_id: Task identifier
+            workflow_name: Workflow name (e.g., "plan_build", "plan_build_test")
+            telegram_id: User's Telegram ID
+        """
+        try:
+            # Map workflow name to script
+            workflow_script_map = {
+                "plan": "adw_plan.py",
+                "build": "adw_build.py",
+                "plan_build": "adw_plan_build.py",
+                "plan_build_test": "adw_plan_build.py",  # Will add test support later
+            }
+
+            script_name = workflow_script_map.get(workflow_name, "adw_plan_build.py")
+            script_path = repo_dir / "adws" / script_name
+
+            if not script_path.exists():
+                raise FileNotFoundError(f"Workflow script not found: {script_path}")
+
+            # Execute the workflow script
+            # Pass task_id as argument (scripts will read task_input.json)
+            cmd = ["python", str(script_path), task_id]
+
+            logger.info("Executing ADW workflow", script=script_name, cwd=str(repo_dir))
+
+            # Send progress update
+            await self.send_status(
+                task_id,
+                telegram_id,
+                "progress",
+                f"Executing {workflow_name} workflow..."
+            )
+
+            # Run the workflow (this will take time)
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=str(repo_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ}
+            )
+
+            # Stream output and send progress updates
+            async def read_stream(stream, is_stderr=False):
+                """Read stream and log output."""
+                while True:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    text = line.decode().strip()
+                    if text:
+                        if is_stderr:
+                            logger.error("ADW stderr", line=text)
+                        else:
+                            logger.info("ADW stdout", line=text)
+
+                        # Send progress for important lines
+                        if any(keyword in text.lower() for keyword in ["error", "failed", "completed", "created"]):
+                            await self.send_status(
+                                task_id,
+                                telegram_id,
+                                "progress",
+                                text[:200]  # Limit message length
+                            )
+
+            # Read both streams concurrently
+            await asyncio.gather(
+                read_stream(process.stdout, False),
+                read_stream(process.stderr, True)
+            )
+
+            # Wait for process to complete
+            return_code = await process.wait()
+
+            if return_code != 0:
+                raise Exception(f"Workflow script failed with exit code {return_code}")
+
+            logger.info("ADW workflow completed successfully", task_id=task_id)
+
+        except Exception as e:
+            logger.error("Failed to execute ADW workflow", error=str(e))
+            raise
 
     async def setup_repository(
         self,

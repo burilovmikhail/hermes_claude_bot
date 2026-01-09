@@ -7,6 +7,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 # Install Claude Code CLI
 RUN curl -fsSL https://raw.githubusercontent.com/anthropics/claude-code/main/install.sh | sh
 
@@ -15,7 +19,7 @@ WORKDIR /app
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system -r requirements.txt
 
 # Copy worker code
 COPY . .
