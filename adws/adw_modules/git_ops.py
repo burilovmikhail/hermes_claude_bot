@@ -83,8 +83,8 @@ def commit_changes(message: str) -> Tuple[bool, Optional[str]]:
 
     # Stage all changes (excluding agents/ via pathspec)
     result = subprocess.run(["git", "add", "-A", "--", ".", ":!agents/"], capture_output=True, text=True)
-    if result.returncode != 0:
-        return False, result.stderr
+    if result.returncode != 0:        
+        return False, f"({result.returncode})" + result.stdout.strip() + result.stderr
 
     # Commit
     result = subprocess.run(
@@ -92,7 +92,7 @@ def commit_changes(message: str) -> Tuple[bool, Optional[str]]:
         capture_output=True, text=True
     )
     if result.returncode != 0:
-        return False, result.stderr
+        return False, f"({result.returncode})" + result.stdout.strip() + result.stderr
     return True, None
 
 
