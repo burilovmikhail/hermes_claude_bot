@@ -103,13 +103,24 @@ def commit_changes(message: str) -> Tuple[bool, Optional[str]]:
     if not result.stdout.strip():
         return True, None  # No changes to commit
 
-    # Ensure .gitignore is set up to exclude agent logs
+    # Ensure .gitignore is set up to exclude agents directory
     ensure_gitignore()
 
-    # Stage all changes
-    result = subprocess.run(["git", "add", "-A"], capture_output=True, text=True)
+    # Stage all changes EXCEPT agents/ directory
+    # Using pathspec to exclude agents/
+    result = subprocess.run(
+        ["git", "add", "-A", "--", ".", ":!agents/"],
+        capture_output=True, text=True
+    )
     if result.returncode != 0:
         return False, result.stderr
+
+    # If agents/ files were already tracked, unstage them
+    result = subprocess.run(
+        ["git", "reset", "HEAD", "agents/"],
+        capture_output=True, text=True
+    )
+    # Ignore errors from reset (it's ok if agents/ doesn't exist in staging)
 
     # Commit
     result = subprocess.run(
@@ -121,8 +132,14 @@ def commit_changes(message: str) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
-def finalize_git_operations(state: 'ADWState', logger: logging.Logger) -> None:
-    """Standard git finalization: push branch and create/update PR."""
+def finalize_git_operations(state: 'ADWState', logger: logging.Logger, task_data: dict = None) -> None:
+    """Standard git finalization: push branch and create/update PR.
+
+    Args:
+        state: ADW state
+        logger: Logger instance
+        task_data: Optional task data dictionary (for task-based workflows)
+    """
     branch_name = state.get("branch_name")
     if not branch_name:
         # Fallback: use current git branch if not main
@@ -133,52 +150,42 @@ def finalize_git_operations(state: 'ADWState', logger: logging.Logger) -> None:
         else:
             logger.error("No branch name in state and current branch is main, skipping git operations")
             return
-    
+
     # Always push
     success, error = push_branch(branch_name)
     if not success:
         logger.error(f"Failed to push branch: {error}")
         return
-    
+
     logger.info(f"Pushed branch: {branch_name}")
-    
+
     # Handle PR
     pr_url = check_pr_exists(branch_name)
-    issue_number = state.get("issue_number")
-    adw_id = state.get("adw_id")
-    
+
     if pr_url:
         logger.info(f"Found existing PR: {pr_url}")
-        # Post PR link for easy reference
-        if issue_number and adw_id:
-            make_issue_comment(
-                issue_number,
-                f"{adw_id}_ops: ✅ Pull request: {pr_url}"
-            )
     else:
-        # Create new PR - fetch issue data first
-        if issue_number:
-            try:
-                repo_url = get_repo_url()
-                repo_path = extract_repo_path(repo_url)
-                from adw_modules.github import fetch_issue
-                issue = fetch_issue(issue_number, repo_path)
-                
-                from adw_modules.workflow_ops import create_pull_request
-                pr_url, error = create_pull_request(branch_name, issue, state, logger)
-            except Exception as e:
-                logger.error(f"Failed to fetch issue for PR creation: {e}")
-                pr_url, error = None, str(e)
-        else:
-            pr_url, error = None, "No issue number in state"
-        
-        if pr_url:
-            logger.info(f"Created PR: {pr_url}")
-            # Post new PR link
-            if issue_number and adw_id:
-                make_issue_comment(
-                    issue_number,
-                    f"{adw_id}_ops: ✅ Pull request created: {pr_url}"
-                )
-        else:
-            logger.error(f"Failed to create PR: {error}")
+        # Create new PR using task data or state data
+        try:
+            # Create a simplified issue-like structure from task data
+            issue = None
+            if task_data:
+                # Convert task data to a format the PR creator can use
+                issue = {
+                    "number": task_data.get("task_id", ""),
+                    "title": task_data.get("title", ""),
+                    "body": task_data.get("description", ""),
+                    "labels": [],
+                }
+                if task_data.get("jira_ticket"):
+                    issue["title"] = f"[{task_data['jira_ticket']}] {issue['title']}"
+
+            from adw_modules.workflow_ops import create_pull_request
+            pr_url, error = create_pull_request(branch_name, issue, state, logger)
+
+            if pr_url:
+                logger.info(f"Created PR: {pr_url}")
+            else:
+                logger.error(f"Failed to create PR: {error}")
+        except Exception as e:
+            logger.error(f"Failed to create PR: {e}")

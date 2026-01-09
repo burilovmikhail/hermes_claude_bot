@@ -182,7 +182,7 @@ def main():
     logger.info(f"Committed implementation: {commit_msg}")
 
     # Finalize git operations (push and PR)
-    finalize_git_operations(state, logger)
+    finalize_git_operations(state, logger, task_data)
 
     logger.info("✅ Implementation phase completed successfully")
 
