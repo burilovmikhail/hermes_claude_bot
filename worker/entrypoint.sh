@@ -26,11 +26,10 @@ fi
 echo "Configuring git safe.directory for /workspace..."
 git config --global --add safe.directory '*'
 
-# Configure GitHub CLI authentication if token is available
+# Verify GitHub CLI is available and will use GITHUB_TOKEN from environment
 if [ -n "$GITHUB_TOKEN" ]; then
-    echo "Configuring GitHub CLI with token..."
-    echo "$GITHUB_TOKEN" | gh auth login --with-token
-    gh auth status
+    echo "GitHub CLI will use GITHUB_TOKEN from environment"
+    # GitHub CLI automatically uses GITHUB_TOKEN env var, no need to login
 else
     echo "WARNING: GITHUB_TOKEN not set. GitHub CLI operations may fail!"
 fi
