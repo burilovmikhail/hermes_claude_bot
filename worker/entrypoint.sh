@@ -22,6 +22,10 @@ else
     echo "WARNING: ANTHROPIC_API_KEY not set. Claude Code will not work!"
 fi
 
+# Configure git to trust the workspace directory
+echo "Configuring git safe.directory for /workspace..."
+git config --global --add safe.directory '*'
+
 # Verify Claude Code is available
 if command -v claude &> /dev/null; then
     echo "Claude Code found at: $(which claude)"
