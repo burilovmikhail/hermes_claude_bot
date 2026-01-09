@@ -26,6 +26,15 @@ fi
 echo "Configuring git safe.directory for /workspace..."
 git config --global --add safe.directory '*'
 
+# Configure GitHub CLI authentication if token is available
+if [ -n "$GITHUB_TOKEN" ]; then
+    echo "Configuring GitHub CLI with token..."
+    echo "$GITHUB_TOKEN" | gh auth login --with-token
+    gh auth status
+else
+    echo "WARNING: GITHUB_TOKEN not set. GitHub CLI operations may fail!"
+fi
+
 # Verify Claude Code is available
 if command -v claude &> /dev/null; then
     echo "Claude Code found at: $(which claude)"

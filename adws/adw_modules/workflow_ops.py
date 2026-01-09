@@ -7,6 +7,7 @@ other workflow operations used by the composable ADW scripts.
 import glob
 import json
 import logging
+import os
 import subprocess
 import re
 from typing import Tuple, Optional
@@ -626,36 +627,42 @@ def ensure_plan_exists(state: ADWState, issue_number: str) -> str:
 
 
 def ensure_adw_id(issue_number: str, adw_id: Optional[str] = None, logger: Optional[logging.Logger] = None) -> str:
-    """Get ADW ID or create a new one and initialize state.
-    
+    """Generate a new ADW ID and initialize state, cleaning up old state if needed.
+
     Args:
         issue_number: The issue number to find/create ADW ID for
-        adw_id: Optional existing ADW ID to use
+        adw_id: Optional old ADW ID to clean up
         logger: Optional logger instance
-        
+
     Returns:
-        The ADW ID (existing or newly created)
+        The new ADW ID
     """
-    # If ADW ID provided, check if state exists
+    import shutil
+
+    # If old ADW ID provided, clean up its directory
     if adw_id:
         state = ADWState.load(adw_id, logger)
         if state:
-            if logger:
-                logger.info(f"Found existing ADW state for ID: {adw_id}")
-            else:
-                print(f"Found existing ADW state for ID: {adw_id}")
-            return adw_id
-        # ADW ID provided but no state exists, create state
-        state = ADWState(adw_id)
-        state.update(adw_id=adw_id, issue_number=issue_number)
-        state.save("ensure_adw_id")
-        if logger:
-            logger.info(f"Created new ADW state for provided ID: {adw_id}")
-        else:
-            print(f"Created new ADW state for provided ID: {adw_id}")
-        return adw_id
-    
-    # No ADW ID provided, create new one with state
+            # Get the agents directory path
+            project_root = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            old_agents_dir = os.path.join(project_root, "agents", adw_id)
+
+            if os.path.exists(old_agents_dir):
+                try:
+                    shutil.rmtree(old_agents_dir)
+                    if logger:
+                        logger.info(f"Cleaned up old ADW state and files: {adw_id}")
+                    else:
+                        print(f"Cleaned up old ADW state and files: {adw_id}")
+                except Exception as e:
+                    if logger:
+                        logger.warning(f"Failed to clean up old ADW directory {old_agents_dir}: {e}")
+                    else:
+                        print(f"Warning: Failed to clean up old ADW directory {old_agents_dir}: {e}")
+
+    # Always create new ADW ID and state
     from adw_modules.utils import make_adw_id
     new_adw_id = make_adw_id()
     state = ADWState(new_adw_id)

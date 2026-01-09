@@ -74,18 +74,43 @@ def create_branch(branch_name: str) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
+def ensure_gitignore() -> None:
+    """Ensure .gitignore excludes agents directory."""
+    import os
+    gitignore_path = ".gitignore"
+    agents_entry = "agents/"
+
+    # Read existing .gitignore if it exists
+    existing_entries = []
+    if os.path.exists(gitignore_path):
+        with open(gitignore_path, "r") as f:
+            existing_entries = f.read().splitlines()
+
+    # Check if agents/ is already ignored
+    if agents_entry not in existing_entries:
+        # Add agents/ to .gitignore
+        with open(gitignore_path, "a") as f:
+            if existing_entries and not existing_entries[-1].strip() == "":
+                f.write("\n")
+            f.write(f"# ADW agent files (auto-generated)\n")
+            f.write(f"{agents_entry}\n")
+
+
 def commit_changes(message: str) -> Tuple[bool, Optional[str]]:
     """Stage all changes and commit. Returns (success, error_message)."""
     # Check if there are changes to commit
     result = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
     if not result.stdout.strip():
         return True, None  # No changes to commit
-    
+
+    # Ensure .gitignore is set up to exclude agent logs
+    ensure_gitignore()
+
     # Stage all changes
     result = subprocess.run(["git", "add", "-A"], capture_output=True, text=True)
     if result.returncode != 0:
         return False, result.stderr
-    
+
     # Commit
     result = subprocess.run(
         ["git", "commit", "-m", message],
