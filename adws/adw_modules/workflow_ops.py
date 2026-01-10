@@ -637,33 +637,10 @@ def ensure_adw_id(issue_number: str, adw_id: Optional[str] = None, logger: Optio
     Returns:
         The new ADW ID
     """
-    import shutil
-
-    # If old ADW ID provided, clean up its directory
-    if adw_id:
-        state = ADWState.load(adw_id, logger)
-        if state:
-            # Get the agents directory path
-            project_root = os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            )
-            old_agents_dir = os.path.join(project_root, "agents", adw_id)
-
-            if os.path.exists(old_agents_dir):
-                try:
-                    shutil.rmtree(old_agents_dir)
-                    if logger:
-                        logger.info(f"Cleaned up old ADW state and files: {adw_id}")
-                    else:
-                        print(f"Cleaned up old ADW state and files: {adw_id}")
-                except Exception as e:
-                    if logger:
-                        logger.warning(f"Failed to clean up old ADW directory {old_agents_dir}: {e}")
-                    else:
-                        print(f"Warning: Failed to clean up old ADW directory {old_agents_dir}: {e}")
 
     # Always create new ADW ID and state
     from adw_modules.utils import make_adw_id
+    
     new_adw_id = make_adw_id()
     state = ADWState(new_adw_id)
     state.update(adw_id=new_adw_id, issue_number=issue_number)
