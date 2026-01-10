@@ -627,20 +627,37 @@ def ensure_plan_exists(state: ADWState, issue_number: str) -> str:
 
 
 def ensure_adw_id(issue_number: str, adw_id: Optional[str] = None, logger: Optional[logging.Logger] = None) -> str:
-    """Generate a new ADW ID and initialize state, cleaning up old state if needed.
-
+    """Get ADW ID or create a new one and initialize state.
+    
     Args:
         issue_number: The issue number to find/create ADW ID for
-        adw_id: Optional old ADW ID to clean up
+        adw_id: Optional existing ADW ID to use
         logger: Optional logger instance
-
+        
     Returns:
-        The new ADW ID
+        The ADW ID (existing or newly created)
     """
-
-    # Always create new ADW ID and state
-    from adw_modules.utils import make_adw_id
+    # If ADW ID provided, check if state exists
+    if adw_id:
+        state = ADWState.load(adw_id, logger)
+        if state:
+            if logger:
+                logger.info(f"Found existing ADW state for ID: {adw_id}")
+            else:
+                print(f"Found existing ADW state for ID: {adw_id}")
+            return adw_id
+        # ADW ID provided but no state exists, create state
+        state = ADWState(adw_id)
+        state.update(adw_id=adw_id, issue_number=issue_number)
+        state.save("ensure_adw_id")
+        if logger:
+            logger.info(f"Created new ADW state for provided ID: {adw_id}")
+        else:
+            print(f"Created new ADW state for provided ID: {adw_id}")
+        return adw_id
     
+    # No ADW ID provided, create new one with state
+    from adw_modules.utils import make_adw_id
     new_adw_id = make_adw_id()
     state = ADWState(new_adw_id)
     state.update(adw_id=new_adw_id, issue_number=issue_number)
