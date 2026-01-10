@@ -57,3 +57,16 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Claude hooks logs
+logs/
+
+# Agent output directories
+agents/
+
+claude-max-output.json
+claude-max-output.jsonl
+
+storage.json
+
+deep_specs/

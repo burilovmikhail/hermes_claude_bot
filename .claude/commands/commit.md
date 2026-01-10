@@ -21,11 +21,12 @@ issue: $3
   - `sdlc_implementor: bug: fix login validation error`
   - `sdlc_planner: chore: update dependencies to latest versions`
 - Extract context from the issue JSON to make the commit message relevant
+- Don't include any 'Generated with...' or 'Authored by...' in the commit message. Focus purely on the changes made.
 
 ## Run
 
 1. Run `git diff HEAD` to understand what changes have been made
-2. Run `git add -A -- . ':!agents/'` to stage all changes except agents/ directory
+2. Run `git add -A` to stage all changes
 3. Run `git commit -m "<generated_commit_message>"` to create the commit
 
 ## Report
