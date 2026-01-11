@@ -129,6 +129,108 @@ The bot uses MongoDB to store:
 - **Conversations**: Chat sessions with metadata
 - **Messages**: Individual messages with role and content
 
+## Deployment
+
+### Automated Deployment with GitHub Actions
+
+This repository includes a GitHub Actions workflow that automatically deploys the application to production when pull requests are merged to the main branch.
+
+#### How It Works
+
+1. When a PR is merged to `main`, the workflow triggers automatically
+2. The workflow connects to the production server via SSH
+3. It pulls the latest code from the main branch
+4. It rebuilds and restarts all Docker containers using `docker compose up -d --build`
+5. Deployment status is reported in the GitHub Actions UI
+
+#### Required GitHub Secrets
+
+To enable automated deployment, configure the following secrets in your repository settings (Settings → Secrets and variables → Actions):
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `SSH_PRIVATE_KEY` | Private SSH key with access to production server | Full key content starting with `-----BEGIN OPENSSH PRIVATE KEY-----` |
+| `HOST_IP` | IP address or hostname of production server | `192.168.1.100` or `example.com` |
+| `DEPLOY_PATH` | Path to application directory on remote host (optional) | `~/hermes_claude_bot` (default if not specified) |
+
+#### SSH Key Setup
+
+1. **Generate a dedicated deployment SSH key** (on your local machine):
+   ```bash
+   ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/hermes_deploy
+   ```
+
+2. **Add public key to production server**:
+   ```bash
+   ssh-copy-id -i ~/.ssh/hermes_deploy.pub user@your-server-ip
+   ```
+
+3. **Copy private key content** and add it to GitHub Secrets as `SSH_PRIVATE_KEY`:
+   ```bash
+   cat ~/.ssh/hermes_deploy
+   ```
+
+#### Production Server Requirements
+
+The SSH user on the production server must have:
+- Read/write access to the application directory
+- Permission to run `docker` and `docker compose` commands (add user to docker group or configure sudo)
+- Git installed and configured
+- Application directory exists at the path specified in `DEPLOY_PATH` secret
+
+#### Monitoring Deployments
+
+1. Navigate to the **Actions** tab in your GitHub repository
+2. Click on the **Deploy to Production** workflow
+3. View deployment logs and status for each PR merge
+
+#### Troubleshooting Deployment Issues
+
+**SSH Connection Failures**:
+- Verify `SSH_PRIVATE_KEY` is correctly formatted (include full key with header/footer)
+- Ensure `HOST_IP` is correct and server is accessible
+- Check SSH key permissions on production server
+
+**Git Pull Failures**:
+- Verify the SSH user has read access to the repository
+- Check for merge conflicts or uncommitted changes on production server
+- Ensure git is properly configured on the server
+
+**Docker Build Failures**:
+- Check Docker and Docker Compose are installed on production server
+- Verify the SSH user has permission to run docker commands
+- Review application logs for build errors: `docker compose logs`
+
+### Manual Deployment
+
+If you need to deploy manually or automated deployment is not configured:
+
+1. **SSH into production server**:
+   ```bash
+   ssh user@your-server-ip
+   ```
+
+2. **Navigate to application directory**:
+   ```bash
+   cd ~/hermes_claude_bot
+   ```
+
+3. **Pull latest code**:
+   ```bash
+   git pull origin main
+   ```
+
+4. **Rebuild and restart containers**:
+   ```bash
+   docker compose up -d --build
+   ```
+
+5. **Verify deployment**:
+   ```bash
+   docker compose ps
+   docker compose logs -f bot
+   ```
+
 ## Development
 
 ### Local Development (without Docker)
