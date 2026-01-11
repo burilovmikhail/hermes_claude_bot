@@ -10,6 +10,7 @@ from bot.services.git_parser import GitCommandParser
 from bot.services.redis_service import RedisService
 from bot.config import settings
 from bot.utils.auth import authorized_users_only
+from bot.utils.constants import escape_markdown
 
 logger = structlog.get_logger()
 
@@ -80,7 +81,7 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             error_msg = parsed.get("error", "Could not determine git operation")
             await update.message.reply_text(
-                f"❌ Invalid command: {error_msg}\n\n"
+                f"❌ Invalid command: {escape_markdown(error_msg)}\n\n"
                 "Please use:\n"
                 "  /git clone <short_name> <jira_prefix> <repo_url>\n"
                 "  /git pull <short_name>"
@@ -93,7 +94,7 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             error=str(e)
         )
         await update.message.reply_text(
-            f"Sorry, I encountered an error:\n{str(e)}"
+            f"Sorry, I encountered an error:\n{escape_markdown(str(e))}"
         )
 
 
@@ -110,7 +111,7 @@ async def handle_clone(update: Update, telegram_id: int, parsed: dict):
     is_valid, error_msg = GitCommandParser.validate_clone_data(parsed)
     if not is_valid:
         await update.message.reply_text(
-            f"❌ Invalid clone command: {error_msg}\n\n"
+            f"❌ Invalid clone command: {escape_markdown(error_msg)}\n\n"
             "Required: /git clone <short_name> <jira_prefix> <repo_url>\n"
             "Example: /git clone backend MS EcorRouge/backend-api"
         )
@@ -128,9 +129,9 @@ async def handle_clone(update: Update, telegram_id: int, parsed: dict):
 
     if existing:
         await update.message.reply_text(
-            f"❌ Repository with short name '{short_name}' already exists.\n\n"
-            f"Existing: {existing.repo_url}\n"
-            f"Jira Prefix: {existing.jira_prefix}\n\n"
+            f"❌ Repository with short name '{escape_markdown(short_name)}' already exists.\n\n"
+            f"Existing: {escape_markdown(existing.repo_url)}\n"
+            f"Jira Prefix: {escape_markdown(existing.jira_prefix)}\n\n"
             "Please choose a different short name or delete the existing one first."
         )
         return
@@ -177,9 +178,9 @@ async def handle_clone(update: Update, telegram_id: int, parsed: dict):
         if success:
             await update.message.reply_text(
                 f"🔄 *Cloning Repository*\n\n"
-                f"*Short Name:* {short_name}\n"
-                f"*Jira Prefix:* {jira_prefix}\n"
-                f"*Repository:* {short_form}\n\n"
+                f"*Short Name:* {escape_markdown(short_name)}\n"
+                f"*Jira Prefix:* {escape_markdown(jira_prefix)}\n"
+                f"*Repository:* {escape_markdown(short_form)}\n\n"
                 f"I'll notify you when the clone completes.",
                 parse_mode="Markdown"
             )
@@ -213,7 +214,7 @@ async def handle_pull(update: Update, telegram_id: int, parsed: dict):
     is_valid, error_msg = GitCommandParser.validate_pull_data(parsed)
     if not is_valid:
         await update.message.reply_text(
-            f"❌ Invalid pull command: {error_msg}\n\n"
+            f"❌ Invalid pull command: {escape_markdown(error_msg)}\n\n"
             "Required: /git pull <short_name>\n"
             "Example: /git pull backend"
         )
@@ -229,7 +230,7 @@ async def handle_pull(update: Update, telegram_id: int, parsed: dict):
 
     if not repo:
         await update.message.reply_text(
-            f"❌ Repository '{short_name}' not found.\n\n"
+            f"❌ Repository '{escape_markdown(short_name)}' not found.\n\n"
             "Use /git clone to add a repository first."
         )
         return
@@ -253,8 +254,8 @@ async def handle_pull(update: Update, telegram_id: int, parsed: dict):
         if success:
             await update.message.reply_text(
                 f"🔄 *Pulling Repository*\n\n"
-                f"*Short Name:* {short_name}\n"
-                f"*Repository:* {repo.repo_url}\n\n"
+                f"*Short Name:* {escape_markdown(short_name)}\n"
+                f"*Repository:* {escape_markdown(repo.repo_url)}\n\n"
                 f"I'll notify you when the pull completes.",
                 parse_mode="Markdown"
             )
@@ -319,13 +320,13 @@ async def handle_git_response(response_data: dict, application):
             except Exception as e:
                 logger.error("Failed to update pull timestamp", error=str(e))
 
-        # Format message based on status
+        # Format message based on status with escaped dynamic values
         if status == "success":
-            text = f"✅ {message}"
+            text = f"✅ {escape_markdown(message)}"
         elif status == "failed":
-            text = f"❌ {message}"
+            text = f"❌ {escape_markdown(message)}"
         else:
-            text = f"ℹ️ {message}"
+            text = f"ℹ️ {escape_markdown(message)}"
 
         # Send message to user
         await application.bot.send_message(
