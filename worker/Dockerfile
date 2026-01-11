@@ -59,6 +59,9 @@ COPY worker/ .
 # Copy ADW scripts from project root
 COPY adws /app/adws
 
+# Copy Claude commands from project root
+COPY .claude /app/.claude
+
 # Copy and set up entrypoint script
 COPY worker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

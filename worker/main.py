@@ -178,6 +178,18 @@ class WorkerService:
             # Copy ADW scripts to target repository
             await self.copy_adw_scripts(repo_dir, task_id, telegram_id, reporting_level)
 
+            await self.send_status(
+                task_id,
+                telegram_id,
+                "progress",
+                "Copying Claude commands...",
+                reporting_level,
+                "technical"
+            )
+
+            # Copy Claude commands to target repository
+            await self.copy_claude_commands(repo_dir, task_id, telegram_id, reporting_level)
+
             # Prepare task input file
             await self.prepare_task_input(
                 repo_dir,
@@ -289,6 +301,70 @@ class WorkerService:
 
         except Exception as e:
             logger.error("Failed to copy ADW scripts", error=str(e))
+            raise
+
+    async def copy_claude_commands(
+        self,
+        repo_dir: Path,
+        task_id: str,
+        telegram_id: int,
+        reporting_level: ReportingLevel = "basic"
+    ):
+        """
+        Copy Claude commands from Hermes to target repository.
+
+        Args:
+            repo_dir: Target repository directory
+            task_id: Task identifier
+            telegram_id: User's Telegram ID
+            reporting_level: Reporting verbosity level
+        """
+        try:
+            # Get the Claude commands directory
+            # In Docker: /app/.claude (copied during build)
+            # In development: ../.claude relative to worker directory
+            worker_dir = Path(__file__).parent
+
+            # Try Docker location first
+            claude_source = worker_dir / ".claude"
+
+            # If not found, try development location (parent directory)
+            if not claude_source.exists():
+                claude_source = worker_dir.parent / ".claude"
+
+            if not claude_source.exists():
+                raise FileNotFoundError(f"Claude commands not found at: {claude_source}")
+
+            logger.info("Found Claude commands source", source=str(claude_source))
+
+            # Verify key directories and files exist
+            commands_dir = claude_source / "commands"
+            settings_file = claude_source / "settings.json"
+
+            if not commands_dir.exists():
+                logger.warning("Commands directory missing in source", path=str(commands_dir))
+            if not settings_file.exists():
+                logger.warning("Settings file missing in source", path=str(settings_file))
+
+            # Target Claude directory in repository
+            claude_target = repo_dir / ".claude"
+
+            # Check if target already has Claude commands
+            if claude_target.exists():
+                logger.info(
+                    "Repository already has Claude commands, skipping copy",
+                    target=str(claude_target)
+                )
+                return
+
+            # Copy Claude commands
+            logger.info("Copying Claude commands", source=str(claude_source), target=str(claude_target))
+            shutil.copytree(claude_source, claude_target)
+
+            logger.info("Claude commands copied successfully", target=str(claude_target))
+
+        except Exception as e:
+            logger.error("Failed to copy Claude commands", error=str(e))
             raise
 
     async def prepare_task_input(
@@ -649,6 +725,22 @@ class WorkerService:
                 return
 
             logger.info("Repository cloned successfully, running /prime", repo_url=repo_url)
+
+            # Copy Claude commands to repository
+            logger.info("Copying Claude commands to repository", repo_url=repo_url)
+            try:
+                await self.copy_claude_commands(repo_dir, task_id, telegram_id, "basic")
+            except Exception as e:
+                await self.send_git_response(
+                    task_id,
+                    telegram_id,
+                    "failed",
+                    f"Failed to copy Claude commands: {str(e)}",
+                    "git_add",
+                    repo_id
+                )
+                logger.error("Failed to copy Claude commands", error=str(e))
+                return
 
             # Run Claude Code with /prime command using agent module
             try:
