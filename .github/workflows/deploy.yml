@@ -30,9 +30,10 @@ jobs:
       - name: Deploy to production server
         env:
           HOST_IP: ${{ secrets.HOST_IP }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '~/hermes_claude_bot' }}
         run: |
-          ssh -o StrictHostKeyChecking=no $HOST_IP << 'EOF'
+          ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$HOST_IP << 'EOF'
             set -e
             echo "===== Starting deployment ====="
 
