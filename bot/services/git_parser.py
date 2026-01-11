@@ -27,7 +27,7 @@ class GitCommandParser:
 
         Returns:
             Dictionary with parsed parameters:
-            - operation: 'clone' or 'pull' or None
+            - operation: 'add' or 'list' or None
             - short_name: Short name for repository (e.g., 'backend')
             - jira_prefix: Jira project prefix (e.g., 'MS', 'PROJ')
             - repo_url: Repository URL (short or full form)
@@ -35,9 +35,9 @@ class GitCommandParser:
         """
         system_prompt = """You are a Git command parser. Analyze the user's command and extract structured information.
 
-Supported operations: 'clone', 'pull'
+Supported operations: 'add', 'list'
 
-For 'clone' operation, extract:
+For 'add' operation, extract:
 1. short_name: A short memorable name for the repository (e.g., 'backend', 'frontend', 'api')
 2. jira_prefix: The Jira project prefix/key (e.g., 'MS', 'PROJ', 'TEAM')
 3. repo_url: The GitHub repository URL in any format:
@@ -45,12 +45,12 @@ For 'clone' operation, extract:
    - Full form: https://github.com/owner/repo
    - Full form with .git: https://github.com/owner/repo.git
 
-For 'pull' operation, extract:
-1. short_name: The short name of the repository to pull
+For 'list' operation:
+No additional parameters needed - just list all registered repositories
 
 Return JSON in this exact format:
 {
-    "operation": "clone" or "pull" or null,
+    "operation": "add" or "list" or null,
     "short_name": "extracted name" or null,
     "jira_prefix": "extracted prefix" or null,
     "repo_url": "extracted url" or null,
@@ -59,17 +59,17 @@ Return JSON in this exact format:
 
 Examples:
 
-Input: "clone backend MS EcorRouge/mcguire-sponsel-backend"
-Output: {"operation": "clone", "short_name": "backend", "jira_prefix": "MS", "repo_url": "EcorRouge/mcguire-sponsel-backend", "error": null}
+Input: "add backend MS EcorRouge/mcguire-sponsel-backend"
+Output: {"operation": "add", "short_name": "backend", "jira_prefix": "MS", "repo_url": "EcorRouge/mcguire-sponsel-backend", "error": null}
 
-Input: "clone the backend repo for MS project, it's at github.com/EcorRouge/mcguire-sponsel-backend"
-Output: {"operation": "clone", "short_name": "backend", "jira_prefix": "MS", "repo_url": "EcorRouge/mcguire-sponsel-backend", "error": null}
+Input: "add the backend repo for MS project, it's at github.com/EcorRouge/mcguire-sponsel-backend"
+Output: {"operation": "add", "short_name": "backend", "jira_prefix": "MS", "repo_url": "EcorRouge/mcguire-sponsel-backend", "error": null}
 
-Input: "pull backend"
-Output: {"operation": "pull", "short_name": "backend", "jira_prefix": null, "repo_url": null, "error": null}
+Input: "list"
+Output: {"operation": "list", "short_name": null, "jira_prefix": null, "repo_url": null, "error": null}
 
-Input: "clone api PROJ https://github.com/myorg/api-service.git"
-Output: {"operation": "clone", "short_name": "api", "jira_prefix": "PROJ", "repo_url": "myorg/api-service", "error": null}
+Input: "add api PROJ https://github.com/myorg/api-service.git"
+Output: {"operation": "add", "short_name": "api", "jira_prefix": "PROJ", "repo_url": "myorg/api-service", "error": null}
 
 If you cannot determine the operation or required fields are missing, set error field with explanation."""
 
@@ -138,9 +138,9 @@ If you cannot determine the operation or required fields are missing, set error 
         return short_form, full_url
 
     @staticmethod
-    def validate_clone_data(parsed_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+    def validate_add_data(parsed_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """
-        Validate parsed data for clone operation.
+        Validate parsed data for add operation.
 
         Args:
             parsed_data: Parsed command data
@@ -151,8 +151,8 @@ If you cannot determine the operation or required fields are missing, set error 
         if parsed_data.get("error"):
             return False, parsed_data["error"]
 
-        if parsed_data.get("operation") != "clone":
-            return False, "Operation must be 'clone'"
+        if parsed_data.get("operation") != "add":
+            return False, "Operation must be 'add'"
 
         required_fields = ["short_name", "jira_prefix", "repo_url"]
         for field in required_fields:
@@ -162,9 +162,9 @@ If you cannot determine the operation or required fields are missing, set error 
         return True, None
 
     @staticmethod
-    def validate_pull_data(parsed_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+    def validate_list_data(parsed_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """
-        Validate parsed data for pull operation.
+        Validate parsed data for list operation.
 
         Args:
             parsed_data: Parsed command data
@@ -175,10 +175,7 @@ If you cannot determine the operation or required fields are missing, set error 
         if parsed_data.get("error"):
             return False, parsed_data["error"]
 
-        if parsed_data.get("operation") != "pull":
-            return False, "Operation must be 'pull'"
-
-        if not parsed_data.get("short_name"):
-            return False, "Missing required field: short_name"
+        if parsed_data.get("operation") != "list":
+            return False, "Operation must be 'list'"
 
         return True, None

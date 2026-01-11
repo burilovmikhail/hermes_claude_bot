@@ -22,10 +22,15 @@ class Repository(Document):
     )
 
     # Status tracking
-    cloned: bool = Field(default=False, description="Whether repo was successfully cloned")
-    last_pulled: Optional[datetime] = Field(
+    registered: bool = Field(default=False, description="Whether repo was successfully registered")
+    primed: bool = Field(default=False, description="Whether repo was successfully primed with Claude Code")
+    last_primed: Optional[datetime] = Field(
         default=None,
-        description="Last time repo was pulled"
+        description="Last time repo was primed"
+    )
+    prime_output: Optional[str] = Field(
+        default=None,
+        description="Output from Claude Code /prime command"
     )
 
     # Timestamps
