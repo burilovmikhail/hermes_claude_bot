@@ -122,11 +122,12 @@ def get_claude_env() -> Dict[str, str]:
         "TERM": os.getenv("TERM"),
     }
 
-    # Only add GitHub tokens if GITHUB_PAT exists
-    github_pat = os.getenv("GITHUB_PAT")
-    if github_pat:
-        required_env_vars["GITHUB_PAT"] = github_pat
-        required_env_vars["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
+    # Only add GitHub tokens if available
+    # Check GITHUB_TOKEN (standard) first, then GITHUB_PAT (legacy) for backward compatibility
+    github_token = os.getenv("GITHUB_TOKEN") or os.getenv("GITHUB_PAT")
+    if github_token:
+        required_env_vars["GITHUB_TOKEN"] = github_token
+        required_env_vars["GH_TOKEN"] = github_token  # Claude Code uses GH_TOKEN
 
     # Filter out None values
     return {k: v for k, v in required_env_vars.items() if v is not None}
