@@ -12,6 +12,7 @@ class ADWParser:
     JIRA_PATTERN = r"\b([A-Z]+-\d+)\b"
     GITHUB_REPO_PATTERN = r"(?:github\.com/|repo:?\s*)([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)"
     WORKFLOW_PATTERN = r"workflow:?\s*(\w+)"
+    REPORT_PATTERN = r"report:?\s*(minimal|basic|detailed|verbose)"
 
     # Repo alias patterns - matches "in the <alias> repo" or "in <alias>"
     REPO_ALIAS_PATTERNS = [
@@ -31,6 +32,7 @@ class ADWParser:
         Returns:
             Dictionary with parsed parameters:
             - workflow_name: Name of workflow (default: plan_build)
+            - reporting_level: Reporting verbosity level (default: basic)
             - jira_ticket: Jira ticket ID if found
             - github_repo: GitHub repository if found (owner/repo format)
             - repo_alias: Repository short name/alias if found
@@ -44,6 +46,7 @@ class ADWParser:
             "jira_prefix": None,
             "github_repo": None,
             "repo_alias": None,
+            "reporting_level": "basic",  # default
             "task_description": original_text
         }
 
@@ -58,6 +61,22 @@ class ADWParser:
             # Remove workflow specification from task description
             command_text = re.sub(
                 ADWParser.WORKFLOW_PATTERN,
+                "",
+                command_text,
+                flags=re.IGNORECASE
+            )
+
+        # Extract reporting level
+        report_match = re.search(
+            ADWParser.REPORT_PATTERN,
+            command_text,
+            re.IGNORECASE
+        )
+        if report_match:
+            result["reporting_level"] = report_match.group(1).lower()
+            # Remove report specification from task description
+            command_text = re.sub(
+                ADWParser.REPORT_PATTERN,
                 "",
                 command_text,
                 flags=re.IGNORECASE

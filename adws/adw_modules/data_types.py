@@ -13,9 +13,17 @@ IssueClassSlashCommand = TaskClassSlashCommand  # Backward compatibility alias
 ADWWorkflow = Literal[
     "adw_plan",           # Planning only
     "adw_build",          # Building only (excluded from webhook)
-    "adw_test",           # Testing only  
+    "adw_test",           # Testing only
     "adw_plan_build",     # Plan + Build
     "adw_plan_build_test" # Plan + Build + Test
+]
+
+# ADW reporting levels
+ReportingLevel = Literal[
+    "minimal",   # Only completion and error messages
+    "basic",     # Completion, error, and high-level workflow messages (default)
+    "detailed",  # Completion, error, workflow, and some technical messages
+    "verbose"    # All messages (no filtering)
 ]
 
 # All slash commands used in the ADW system
@@ -275,3 +283,4 @@ class ADWStateData(BaseModel):
     plan_file: Optional[str] = None
     issue_class: Optional[IssueClassSlashCommand] = None
     task_class: Optional[TaskClassSlashCommand] = None  # Same as issue_class, more generic name
+    reporting_level: ReportingLevel = "basic"  # Controls message verbosity (default: basic)
