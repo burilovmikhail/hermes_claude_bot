@@ -31,13 +31,13 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Handle /git command.
 
     Supports:
-    - /git clone <short_name> <jira_prefix> <repo_url>
-    - /git pull <short_name>
+    - /git add <short_name> <jira_prefix> <repo_url>
+    - /git list
 
     Usage examples:
-      /git clone backend MS EcorRouge/mcguire-sponsel-backend
-      /git clone api PROJ https://github.com/myorg/api-service
-      /git pull backend
+      /git add backend MS EcorRouge/mcguire-sponsel-backend
+      /git add api PROJ https://github.com/myorg/api-service
+      /git list
     """
     user = update.effective_user
     telegram_id = user.id
@@ -49,12 +49,12 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "Please provide a git command.\n\n"
             "Usage:\n"
-            "  /git clone <short_name> <jira_prefix> <repo_url>\n"
-            "  /git pull <short_name>\n\n"
+            "  /git add <short_name> <jira_prefix> <repo_url>\n"
+            "  /git list\n\n"
             "Examples:\n"
-            "  /git clone backend MS EcorRouge/backend-api\n"
-            "  /git clone api PROJ github.com/myorg/api-service\n"
-            "  /git pull backend"
+            "  /git add backend MS EcorRouge/backend-api\n"
+            "  /git add api PROJ github.com/myorg/api-service\n"
+            "  /git list"
         )
         return
 
@@ -74,17 +74,17 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         operation = parsed.get("operation")
 
-        if operation == "clone":
-            await handle_clone(update, telegram_id, parsed)
-        elif operation == "pull":
-            await handle_pull(update, telegram_id, parsed)
+        if operation == "add":
+            await handle_add(update, telegram_id, parsed)
+        elif operation == "list":
+            await handle_list(update, telegram_id, parsed)
         else:
             error_msg = parsed.get("error", "Could not determine git operation")
             await update.message.reply_text(
                 f"❌ Invalid command: {escape_markdown(error_msg)}\n\n"
                 "Please use:\n"
-                "  /git clone <short_name> <jira_prefix> <repo_url>\n"
-                "  /git pull <short_name>"
+                "  /git add <short_name> <jira_prefix> <repo_url>\n"
+                "  /git list"
             )
 
     except Exception as e:
@@ -98,9 +98,9 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def handle_clone(update: Update, telegram_id: int, parsed: dict):
+async def handle_add(update: Update, telegram_id: int, parsed: dict):
     """
-    Handle git clone operation.
+    Handle git add operation.
 
     Args:
         update: Telegram update
@@ -108,12 +108,12 @@ async def handle_clone(update: Update, telegram_id: int, parsed: dict):
         parsed: Parsed command data
     """
     # Validate parsed data
-    is_valid, error_msg = GitCommandParser.validate_clone_data(parsed)
+    is_valid, error_msg = GitCommandParser.validate_add_data(parsed)
     if not is_valid:
         await update.message.reply_text(
-            f"❌ Invalid clone command: {escape_markdown(error_msg)}\n\n"
-            "Required: /git clone <short_name> <jira_prefix> <repo_url>\n"
-            "Example: /git clone backend MS EcorRouge/backend-api"
+            f"❌ Invalid add command: {escape_markdown(error_msg)}\n\n"
+            "Required: /git add <short_name> <jira_prefix> <repo_url>\n"
+            "Example: /git add backend MS EcorRouge/backend-api"
         )
         return
 
@@ -146,7 +146,8 @@ async def handle_clone(update: Update, telegram_id: int, parsed: dict):
         jira_prefix=jira_prefix,
         repo_url=short_form,
         full_url=full_url,
-        cloned=False
+        registered=False,
+        primed=False
     )
 
     # Save to database
@@ -159,13 +160,13 @@ async def handle_clone(update: Update, telegram_id: int, parsed: dict):
         repo_url=short_form
     )
 
-    # Send clone task to worker
+    # Send add task to worker (clone + prime)
     if redis_service:
         task_id = str(uuid.uuid4())
         task_data = {
             "task_id": task_id,
             "telegram_id": telegram_id,
-            "operation": "git_clone",
+            "operation": "git_add",
             "repo_id": str(repo.id),
             "short_name": short_name,
             "repo_url": short_form,
@@ -177,33 +178,33 @@ async def handle_clone(update: Update, telegram_id: int, parsed: dict):
 
         if success:
             await update.message.reply_text(
-                f"🔄 *Cloning Repository*\n\n"
+                f"🔄 *Adding Repository*\n\n"
                 f"*Short Name:* {escape_markdown(short_name)}\n"
                 f"*Jira Prefix:* {escape_markdown(jira_prefix)}\n"
                 f"*Repository:* {escape_markdown(short_form)}\n\n"
-                f"I'll notify you when the clone completes.",
+                f"I'll clone the repository and prime it with Claude Code. You'll be notified when complete.",
                 parse_mode="Markdown"
             )
 
             logger.info(
-                "Clone task queued",
+                "Add task queued",
                 task_id=task_id,
                 telegram_id=telegram_id,
                 short_name=short_name
             )
         else:
             await update.message.reply_text(
-                "Failed to queue clone task. Repository saved but not cloned yet."
+                "Failed to queue add task. Repository saved but not processed yet."
             )
     else:
         await update.message.reply_text(
-            "Worker service is not available. Repository saved but not cloned yet."
+            "Worker service is not available. Repository saved but not processed yet."
         )
 
 
-async def handle_pull(update: Update, telegram_id: int, parsed: dict):
+async def handle_list(update: Update, telegram_id: int, parsed: dict):
     """
-    Handle git pull operation.
+    Handle git list operation.
 
     Args:
         update: Telegram update
@@ -211,69 +212,61 @@ async def handle_pull(update: Update, telegram_id: int, parsed: dict):
         parsed: Parsed command data
     """
     # Validate parsed data
-    is_valid, error_msg = GitCommandParser.validate_pull_data(parsed)
+    is_valid, error_msg = GitCommandParser.validate_list_data(parsed)
     if not is_valid:
         await update.message.reply_text(
-            f"❌ Invalid pull command: {escape_markdown(error_msg)}\n\n"
-            "Required: /git pull <short_name>\n"
-            "Example: /git pull backend"
+            f"❌ Invalid list command: {escape_markdown(error_msg)}\n\n"
+            "Usage: /git list"
         )
         return
 
-    short_name = parsed["short_name"]
+    # Find all repositories for this user
+    repos = await Repository.find(Repository.telegram_id == telegram_id).to_list()
 
-    # Find repository
-    repo = await Repository.find_one(
-        Repository.telegram_id == telegram_id,
-        Repository.short_name == short_name
+    if not repos:
+        await update.message.reply_text(
+            "📋 You have no registered repositories.\n\n"
+            "Use `/git add` to register a repository.\n"
+            "Example: `/git add backend MS EcorRouge/backend-api`",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Format repository list
+    response_lines = ["📋 *Your Registered Repositories*\n"]
+
+    for repo in repos:
+        response_lines.append(f"━━━━━━━━━━━━━━━━━━")
+        response_lines.append(f"*{escape_markdown(repo.short_name)}*")
+        response_lines.append(f"Repository: {escape_markdown(repo.repo_url)}")
+        response_lines.append(f"Jira Prefix: {escape_markdown(repo.jira_prefix)}")
+
+        # Status
+        if repo.registered:
+            reg_status = "✅ Registered"
+        else:
+            reg_status = "⏳ Pending"
+        response_lines.append(f"Status: {reg_status}")
+
+        if repo.primed:
+            prime_status = "✅ Primed"
+            if repo.last_primed:
+                prime_status += f" ({repo.last_primed.strftime('%Y-%m-%d %H:%M')} UTC)"
+        else:
+            prime_status = "❌ Not Primed"
+        response_lines.append(f"Prime: {prime_status}")
+        response_lines.append("")
+
+    await update.message.reply_text(
+        "\n".join(response_lines),
+        parse_mode="Markdown"
     )
 
-    if not repo:
-        await update.message.reply_text(
-            f"❌ Repository '{escape_markdown(short_name)}' not found.\n\n"
-            "Use /git clone to add a repository first."
-        )
-        return
-
-    # Send pull task to worker
-    if redis_service:
-        task_id = str(uuid.uuid4())
-        task_data = {
-            "task_id": task_id,
-            "telegram_id": telegram_id,
-            "operation": "git_pull",
-            "repo_id": str(repo.id),
-            "short_name": short_name,
-            "repo_url": repo.repo_url,
-            "full_url": repo.full_url,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-        success = await redis_service.publish_task(task_data)
-
-        if success:
-            await update.message.reply_text(
-                f"🔄 *Pulling Repository*\n\n"
-                f"*Short Name:* {escape_markdown(short_name)}\n"
-                f"*Repository:* {escape_markdown(repo.repo_url)}\n\n"
-                f"I'll notify you when the pull completes.",
-                parse_mode="Markdown"
-            )
-
-            logger.info(
-                "Pull task queued",
-                task_id=task_id,
-                telegram_id=telegram_id,
-                short_name=short_name
-            )
-        else:
-            await update.message.reply_text(
-                "Failed to queue pull task. Please try again later."
-            )
-    else:
-        await update.message.reply_text(
-            "Worker service is not available. Please contact the administrator."
-        )
+    logger.info(
+        "Listed repositories",
+        telegram_id=telegram_id,
+        count=len(repos)
+    )
 
 
 async def handle_git_response(response_data: dict, application):
@@ -291,38 +284,36 @@ async def handle_git_response(response_data: dict, application):
         message = response_data.get("message", "")
         operation = response_data.get("operation")
         repo_id = response_data.get("repo_id")
+        prime_output = response_data.get("prime_output")
 
         if not all([task_id, telegram_id, status]):
             logger.warning("Incomplete git response", data=response_data)
             return
 
-        # Update repository status if clone succeeded
-        if operation == "git_clone" and status == "success" and repo_id:
+        # Update repository status if add (clone + prime) succeeded
+        if operation == "git_add" and status == "success" and repo_id:
             try:
                 repo = await Repository.get(repo_id)
                 if repo:
-                    repo.cloned = True
+                    repo.registered = True
+                    repo.primed = True
+                    repo.last_primed = datetime.utcnow()
+                    if prime_output:
+                        repo.prime_output = prime_output
                     repo.update_timestamp()
                     await repo.save()
-                    logger.info("Updated repository clone status", repo_id=repo_id)
+                    logger.info("Updated repository add status", repo_id=repo_id)
             except Exception as e:
                 logger.error("Failed to update repository status", error=str(e))
-
-        # Update last_pulled timestamp if pull succeeded
-        if operation == "git_pull" and status == "success" and repo_id:
-            try:
-                repo = await Repository.get(repo_id)
-                if repo:
-                    repo.last_pulled = datetime.utcnow()
-                    repo.update_timestamp()
-                    await repo.save()
-                    logger.info("Updated repository pull timestamp", repo_id=repo_id)
-            except Exception as e:
-                logger.error("Failed to update pull timestamp", error=str(e))
 
         # Format message based on status with escaped dynamic values
         if status == "success":
             text = f"✅ {escape_markdown(message)}"
+            # Include prime output if available
+            if prime_output:
+                text += f"\n\n*Prime Output:*\n```\n{escape_markdown(prime_output[:1000])}\n```"
+                if len(prime_output) > 1000:
+                    text += "\n_(Output truncated)_"
         elif status == "failed":
             text = f"❌ {escape_markdown(message)}"
         else:
@@ -331,7 +322,8 @@ async def handle_git_response(response_data: dict, application):
         # Send message to user
         await application.bot.send_message(
             chat_id=telegram_id,
-            text=text
+            text=text,
+            parse_mode="Markdown"
         )
 
         logger.info(

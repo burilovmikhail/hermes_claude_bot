@@ -112,10 +112,8 @@ class WorkerService:
         logger.info("Processing task", task_id=task_id, operation=operation)
 
         # Route to appropriate handler
-        if operation == "git_clone":
-            await self.handle_git_clone(task_data)
-        elif operation == "git_pull":
-            await self.handle_git_pull(task_data)
+        if operation == "git_add":
+            await self.handle_git_add(task_data)
         else:
             await self.handle_adw_task(task_data)
 
@@ -585,9 +583,9 @@ class WorkerService:
             logger.error("Failed to setup repository", repo=github_repo, error=str(e))
             raise
 
-    async def handle_git_clone(self, task_data: dict):
+    async def handle_git_add(self, task_data: dict):
         """
-        Handle git clone operation.
+        Handle git add operation (clone + prime).
 
         Args:
             task_data: Task data from Redis queue
@@ -599,7 +597,7 @@ class WorkerService:
         full_url = task_data.get("full_url")
         repo_id = task_data.get("repo_id")
 
-        logger.info("Cloning repository", task_id=task_id, repo_url=repo_url)
+        logger.info("Adding repository (clone + prime)", task_id=task_id, repo_url=repo_url)
 
         try:
             # Create directory for this repository using short_name
@@ -614,7 +612,7 @@ class WorkerService:
                     telegram_id,
                     "failed",
                     f"Repository directory '{short_name}' already exists",
-                    "git_clone",
+                    "git_add",
                     repo_id
                 )
                 return
@@ -625,6 +623,7 @@ class WorkerService:
                 f"https://{settings.github_token}@github.com/"
             )
 
+            logger.info("Cloning repository", repo_url=repo_url)
             result = subprocess.run(
                 ["git", "clone", clone_url, str(repo_dir)],
                 capture_output=True,
@@ -632,27 +631,65 @@ class WorkerService:
                 timeout=300
             )
 
-            if result.returncode == 0:
-                await self.send_git_response(
-                    task_id,
-                    telegram_id,
-                    "success",
-                    f"Repository cloned successfully: {short_name}",
-                    "git_clone",
-                    repo_id
-                )
-                logger.info("Repository cloned successfully", repo_url=repo_url)
-            else:
+            if result.returncode != 0:
                 error_msg = result.stderr or "Clone failed"
                 await self.send_git_response(
                     task_id,
                     telegram_id,
                     "failed",
                     f"Clone failed: {error_msg}",
-                    "git_clone",
+                    "git_add",
                     repo_id
                 )
                 logger.error("Clone failed", error=error_msg)
+                return
+
+            logger.info("Repository cloned successfully, running /prime", repo_url=repo_url)
+
+            # Run Claude Code with /prime command
+            try:
+                prime_result = subprocess.run(
+                    ["claude", "prime"],
+                    cwd=str(repo_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+
+                if prime_result.returncode == 0:
+                    prime_output = prime_result.stdout.strip()
+                    await self.send_git_response(
+                        task_id,
+                        telegram_id,
+                        "success",
+                        f"Repository added and primed successfully: {short_name}",
+                        "git_add",
+                        repo_id,
+                        prime_output
+                    )
+                    logger.info("Repository primed successfully", repo_url=repo_url)
+                else:
+                    error_msg = prime_result.stderr or "Prime failed"
+                    await self.send_git_response(
+                        task_id,
+                        telegram_id,
+                        "failed",
+                        f"Repository cloned but prime failed: {error_msg}",
+                        "git_add",
+                        repo_id
+                    )
+                    logger.error("Prime failed", error=error_msg)
+
+            except subprocess.TimeoutExpired:
+                await self.send_git_response(
+                    task_id,
+                    telegram_id,
+                    "failed",
+                    "Repository cloned but prime operation timed out",
+                    "git_add",
+                    repo_id
+                )
+                logger.error("Prime timeout", repo_url=repo_url)
 
         except subprocess.TimeoutExpired:
             await self.send_git_response(
@@ -660,7 +697,7 @@ class WorkerService:
                 telegram_id,
                 "failed",
                 "Clone operation timed out",
-                "git_clone",
+                "git_add",
                 repo_id
             )
             logger.error("Clone timeout", repo_url=repo_url)
@@ -669,99 +706,12 @@ class WorkerService:
                 task_id,
                 telegram_id,
                 "failed",
-                f"Clone error: {str(e)}",
-                "git_clone",
+                f"Add operation error: {str(e)}",
+                "git_add",
                 repo_id
             )
-            logger.error("Clone error", error=str(e))
+            logger.error("Add error", error=str(e))
 
-    async def handle_git_pull(self, task_data: dict):
-        """
-        Handle git pull operation.
-
-        Args:
-            task_data: Task data from Redis queue
-        """
-        task_id = task_data.get("task_id")
-        telegram_id = task_data.get("telegram_id")
-        short_name = task_data.get("short_name")
-        repo_url = task_data.get("repo_url")
-        repo_id = task_data.get("repo_id")
-
-        logger.info("Pulling repository", task_id=task_id, repo_url=repo_url)
-
-        try:
-            # Find repository directory
-            repo_dir = self.workspace / f"{telegram_id}" / short_name
-
-            if not repo_dir.exists():
-                await self.send_git_response(
-                    task_id,
-                    telegram_id,
-                    "failed",
-                    f"Repository '{short_name}' not found. Use /git clone first.",
-                    "git_pull",
-                    repo_id
-                )
-                return
-
-            # Pull latest changes
-            result = subprocess.run(
-                ["git", "pull"],
-                cwd=repo_dir,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-
-            if result.returncode == 0:
-                output = result.stdout.strip()
-                if "Already up to date" in output:
-                    message = f"Repository '{short_name}' is already up to date"
-                else:
-                    message = f"Repository '{short_name}' pulled successfully"
-
-                await self.send_git_response(
-                    task_id,
-                    telegram_id,
-                    "success",
-                    message,
-                    "git_pull",
-                    repo_id
-                )
-                logger.info("Repository pulled successfully", repo_url=repo_url)
-            else:
-                error_msg = result.stderr or "Pull failed"
-                await self.send_git_response(
-                    task_id,
-                    telegram_id,
-                    "failed",
-                    f"Pull failed: {error_msg}",
-                    "git_pull",
-                    repo_id
-                )
-                logger.error("Pull failed", error=error_msg)
-
-        except subprocess.TimeoutExpired:
-            await self.send_git_response(
-                task_id,
-                telegram_id,
-                "failed",
-                "Pull operation timed out",
-                "git_pull",
-                repo_id
-            )
-            logger.error("Pull timeout", repo_url=repo_url)
-        except Exception as e:
-            await self.send_git_response(
-                task_id,
-                telegram_id,
-                "failed",
-                f"Pull error: {str(e)}",
-                "git_pull",
-                repo_id
-            )
-            logger.error("Pull error", error=str(e))
 
     async def send_git_response(
         self,
@@ -770,7 +720,8 @@ class WorkerService:
         status: str,
         message: str,
         operation: str,
-        repo_id: str
+        repo_id: str,
+        prime_output: str = None
     ):
         """
         Send git operation response to bot via Redis.
@@ -780,8 +731,9 @@ class WorkerService:
             telegram_id: User's Telegram ID
             status: Status (success, failed)
             message: Status message
-            operation: Operation type (git_clone, git_pull)
+            operation: Operation type (git_add)
             repo_id: Repository ID in MongoDB
+            prime_output: Optional output from /prime command
         """
         try:
             response = {
@@ -792,6 +744,8 @@ class WorkerService:
                 "operation": operation,
                 "repo_id": repo_id
             }
+            if prime_output is not None:
+                response["prime_output"] = prime_output
             await self.redis.publish("adw:responses", json.dumps(response))
             logger.info("Sent git response", task_id=task_id, status=status)
         except Exception as e:
