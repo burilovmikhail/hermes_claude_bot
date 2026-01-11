@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from config import settings
+from worker.reporting import MessageFilter, MessageCategory, ReportingLevel
 
 # Setup logging
 structlog.configure(
@@ -50,17 +51,43 @@ class WorkerService:
             await self.redis.close()
             logger.info("Disconnected from Redis")
 
-    async def send_status(self, task_id: str, telegram_id: int, status: str, message: str):
+    async def send_status(
+        self,
+        task_id: str,
+        telegram_id: int,
+        status: str,
+        message: str,
+        reporting_level: ReportingLevel = "basic",
+        category: MessageCategory = None
+    ):
         """
-        Send status update to bot via Redis.
+        Send status update to bot via Redis with message filtering.
 
         Args:
             task_id: Task identifier
             telegram_id: User's Telegram ID
             status: Status (started, progress, finished, failed)
             message: Status message
+            reporting_level: Reporting verbosity level
+            category: Message category (auto-detected if None)
         """
         try:
+            # Auto-categorize message if category not provided
+            if category is None:
+                category = MessageFilter.categorize_message(message)
+
+            # Always send started, finished, and failed status messages
+            # Only filter progress messages
+            if status == "progress":
+                if not MessageFilter.should_send_message(message, reporting_level, category):
+                    logger.debug(
+                        "Filtered message",
+                        task_id=task_id,
+                        category=category,
+                        reporting_level=reporting_level
+                    )
+                    return
+
             response = {
                 "task_id": task_id,
                 "telegram_id": telegram_id,
@@ -106,8 +133,9 @@ class WorkerService:
         task_description = task_data.get("task_description")
         jira_ticket = task_data.get("jira_ticket")
         jira_details = task_data.get("jira_details")
+        reporting_level = task_data.get("reporting_level", "basic")
 
-        logger.info("Processing ADW task", task_id=task_id, workflow=workflow_name)
+        logger.info("Processing ADW task", task_id=task_id, workflow=workflow_name, reporting_level=reporting_level)
 
         try:
             # Send started status
@@ -115,7 +143,8 @@ class WorkerService:
                 task_id,
                 telegram_id,
                 "started",
-                f"Starting workflow: {workflow_name}"
+                f"Starting workflow: {workflow_name}",
+                reporting_level
             )
 
             # Prepare workspace for this task (use telegram_id subdirectory)
@@ -131,18 +160,21 @@ class WorkerService:
                 repo_url,
                 user_workspace,
                 task_id,
-                telegram_id
+                telegram_id,
+                reporting_level
             )
 
             await self.send_status(
                 task_id,
                 telegram_id,
                 "progress",
-                "Repository setup complete. Copying ADW scripts..."
+                "Repository setup complete. Copying ADW scripts...",
+                reporting_level,
+                "technical"
             )
 
             # Copy ADW scripts to target repository
-            await self.copy_adw_scripts(repo_dir, task_id, telegram_id)
+            await self.copy_adw_scripts(repo_dir, task_id, telegram_id, reporting_level)
 
             # Prepare task input file
             await self.prepare_task_input(
@@ -158,7 +190,9 @@ class WorkerService:
                 task_id,
                 telegram_id,
                 "progress",
-                f"Running ADW workflow: {workflow_name}..."
+                f"Running ADW workflow: {workflow_name}...",
+                reporting_level,
+                "workflow"
             )
 
             # Execute ADW workflow
@@ -166,7 +200,8 @@ class WorkerService:
                 repo_dir,
                 task_id,
                 workflow_name,
-                telegram_id
+                telegram_id,
+                reporting_level
             )
 
             # Send finished status
@@ -174,7 +209,8 @@ class WorkerService:
                 task_id,
                 telegram_id,
                 "finished",
-                f"✅ Workflow completed successfully!\n\nRepository: {repo_url}\nWorkspace: {repo_dir}"
+                f"✅ Workflow completed successfully!\n\nRepository: {repo_url}\nWorkspace: {repo_dir}",
+                reporting_level
             )
 
             logger.info("Task completed", task_id=task_id)
@@ -185,14 +221,16 @@ class WorkerService:
                 task_id,
                 telegram_id,
                 "failed",
-                f"❌ Workflow failed: {str(e)}"
+                f"❌ Workflow failed: {str(e)}",
+                reporting_level
             )
 
     async def copy_adw_scripts(
         self,
         repo_dir: Path,
         task_id: str,
-        telegram_id: int
+        telegram_id: int,
+        reporting_level: ReportingLevel = "basic"
     ):
         """
         Copy ADW scripts from Hermes to target repository and install dependencies.
@@ -201,6 +239,7 @@ class WorkerService:
             repo_dir: Target repository directory
             task_id: Task identifier
             telegram_id: User's Telegram ID
+            reporting_level: Reporting verbosity level
         """
         try:
             # Get the ADW scripts directory
@@ -307,7 +346,8 @@ class WorkerService:
         repo_dir: Path,
         task_id: str,
         workflow_name: str,
-        telegram_id: int
+        telegram_id: int,
+        reporting_level: ReportingLevel = "basic"
     ):
         """
         Execute ADW workflow script.
@@ -317,6 +357,7 @@ class WorkerService:
             task_id: Task identifier
             workflow_name: Workflow name (e.g., "plan_build", "plan_build_test")
             telegram_id: User's Telegram ID
+            reporting_level: Reporting verbosity level
         """
         try:
             # Map workflow name to script
@@ -344,7 +385,9 @@ class WorkerService:
                 task_id,
                 telegram_id,
                 "progress",
-                f"Executing {workflow_name} workflow..."
+                f"Executing {workflow_name} workflow...",
+                reporting_level,
+                "workflow"
             )
 
             # Run the workflow (this will take time)
@@ -376,7 +419,8 @@ class WorkerService:
                                 task_id,
                                 telegram_id,
                                 "progress",
-                                text[:200]  # Limit message length
+                                text[:200],  # Limit message length
+                                reporting_level
                             )
 
             # Read both streams concurrently
@@ -402,7 +446,8 @@ class WorkerService:
         github_repo: str,
         task_workspace: Path,
         task_id: str,
-        telegram_id: int
+        telegram_id: int,
+        reporting_level: ReportingLevel = "basic"
     ) -> Path:
         """
         Clone or update a GitHub repository.
@@ -412,6 +457,7 @@ class WorkerService:
             task_workspace: Task workspace directory
             task_id: Task identifier
             telegram_id: User's Telegram ID
+            reporting_level: Reporting verbosity level
 
         Returns:
             Path to repository directory
@@ -426,7 +472,9 @@ class WorkerService:
                     task_id,
                     telegram_id,
                     "progress",
-                    f"Updating repository: {github_repo}"
+                    f"Updating repository: {github_repo}",
+                    reporting_level,
+                    "technical"
                 )
 
                 try:
@@ -436,7 +484,9 @@ class WorkerService:
                         task_id,
                         telegram_id,
                         "progress",
-                        f"Switching to main branch: {github_repo}"
+                        f"Switching to main branch: {github_repo}",
+                        reporting_level,
+                        "technical"
                     )
 
                     checkout_result = subprocess.run(
@@ -473,7 +523,9 @@ class WorkerService:
                         task_id,
                         telegram_id,
                         "progress",
-                        f"Recovering repository: {github_repo}"
+                        f"Recovering repository: {github_repo}",
+                        reporting_level,
+                        "technical"
                     )
 
                     shutil.rmtree(repo_dir)
@@ -484,7 +536,9 @@ class WorkerService:
                         task_id,
                         telegram_id,
                         "progress",
-                        f"Cloning repository: {github_repo}"
+                        f"Cloning repository: {github_repo}",
+                        reporting_level,
+                        "technical"
                     )
 
                     # Prepare git URL with token
@@ -506,7 +560,9 @@ class WorkerService:
                     task_id,
                     telegram_id,
                     "progress",
-                    f"Cloning repository: {github_repo}"
+                    f"Cloning repository: {github_repo}",
+                    reporting_level,
+                    "technical"
                 )
 
                 # Prepare git URL with token

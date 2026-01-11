@@ -165,6 +165,7 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "task_description": parsed["task_description"],
             "jira_ticket": parsed["jira_ticket"],
             "jira_details": None,
+            "reporting_level": parsed["reporting_level"],
             "timestamp": datetime.utcnow().isoformat()
         }
 
@@ -310,7 +311,8 @@ async def handle_adw_response(response_data: dict, application):
         elif status == "failed":
             text = f"❌ *Workflow Failed*\n\nTask ID: `{escape_markdown(task_id)}`\n{escape_markdown(message)}"
         elif status == "progress":
-            text = f"🔄 *Progress Update*\n\nTask ID: `{escape_markdown(task_id)}`\n{escape_markdown(message)}"
+            # Simplified progress format - no "Progress Update" title or task_id
+            text = f"🔄 {escape_markdown(message)}"
         else:
             text = f"📝 *Update*\n\nTask ID: `{escape_markdown(task_id)}`\n{escape_markdown(message)}"
 
