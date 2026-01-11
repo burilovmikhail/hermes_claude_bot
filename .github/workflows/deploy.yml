@@ -1,0 +1,72 @@
+name: Deploy to Production
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy Application
+    # Only run if the PR was merged (not just closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add remote host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.HOST_IP }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to production server
+        env:
+          HOST_IP: ${{ secrets.HOST_IP }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '~/hermes_claude_bot' }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $HOST_IP << 'EOF'
+            set -e
+            echo "===== Starting deployment ====="
+
+            # Navigate to application directory
+            cd ${{ secrets.DEPLOY_PATH || '~/hermes_claude_bot' }}
+            echo "Working directory: $(pwd)"
+
+            # Pull latest code from main branch
+            echo "===== Pulling latest code ====="
+            git pull origin main
+
+            # Rebuild and restart Docker containers
+            echo "===== Rebuilding and restarting containers ====="
+            docker compose up -d --build
+
+            # Show running containers
+            echo "===== Deployment complete ====="
+            docker compose ps
+          EOF
+
+      - name: Report deployment status
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Application deployed to: ${{ secrets.HOST_IP }}"
+          echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+
+      - name: Report deployment failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Please check the logs above for error details."
+          echo "Common issues:"
+          echo "  - SSH connection failure (check HOST_IP and SSH_PRIVATE_KEY secrets)"
+          echo "  - Git pull failure (check for merge conflicts or permissions)"
+          echo "  - Docker build failure (check Dockerfiles and dependencies)"
+          exit 1
