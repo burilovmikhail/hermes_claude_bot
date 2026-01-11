@@ -782,7 +782,7 @@ class WorkerService:
                         repo_id,
                         prime_output
                     )
-                    logger.info("Repository primed successfully", repo_url=repo_url, session_id=response.session_id)
+                    logger.info("Repository primed successfully", repo_url=repo_url, session_id=response.session_id, prime_output=prime_output)
                 else:
                     error_msg = response.output or "Prime failed"
                     await self.send_git_response(
