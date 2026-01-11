@@ -1,4 +1,5 @@
 from enum import Enum
+from telegram.helpers import escape_markdown as telegram_escape_markdown
 
 
 class AIProvider(str, Enum):
@@ -6,6 +7,44 @@ class AIProvider(str, Enum):
 
     OPENAI = "openai"
     CLAUDE = "claude"
+
+
+def escape_markdown(text: str | None) -> str:
+    """
+    Escape special markdown characters for Telegram messages.
+
+    This function wraps telegram.helpers.escape_markdown() to properly escape
+    all Telegram markdown special characters, preventing unintended formatting
+    when sending dynamic content (like variable names, file paths, repository URLs,
+    task IDs, error messages, etc.).
+
+    When using parse_mode="Markdown" in Telegram messages, special characters
+    like underscores (_), asterisks (*), and backticks (`) are interpreted as
+    markdown formatting. This function escapes those characters so they display
+    literally instead of being parsed as formatting.
+
+    Args:
+        text: The text to escape. Can be None or empty string.
+
+    Returns:
+        Escaped text safe for Telegram markdown, or empty string if input is None/empty.
+
+    Example:
+        >>> task_id = "abc_123_def"  # Has underscores
+        >>> repo_url = "org/my_repo"  # Has underscores
+        >>> # Wrong - underscores will be interpreted as markdown:
+        >>> message = f"*Task ID:* {task_id}"
+        >>> # Correct - escape dynamic values:
+        >>> message = f"*Task ID:* {escape_markdown(task_id)}"
+
+    Note:
+        - Use this for ALL dynamic/user-generated content
+        - Do NOT use this for static markdown formatting (like *Header*)
+        - Build messages by combining static markdown with escaped dynamic values
+    """
+    if not text:
+        return ""
+    return telegram_escape_markdown(str(text), version=1)
 
 
 # Telegram message limits

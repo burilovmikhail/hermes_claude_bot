@@ -8,6 +8,7 @@ from bot.services.jira_service import JiraService
 from bot.services.openai_service import OpenAIService
 from bot.config import settings
 from bot.utils.auth import authorized_users_only
+from bot.utils.constants import escape_markdown
 
 logger = structlog.get_logger()
 
@@ -37,7 +38,7 @@ async def ticket_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ticket_id = message_text.strip().upper()
     if not re.match(r"^[A-Z]+-\d+$", ticket_id):
         await update.message.reply_text(
-            f"Invalid ticket ID format: {ticket_id}\n"
+            f"Invalid ticket ID format: {escape_markdown(ticket_id)}\n"
             "Expected format: PROJECT-NUMBER (e.g., MS-1234)"
         )
         return
@@ -64,7 +65,7 @@ async def ticket_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not issue:
             await update.message.reply_text(
-                f"Ticket {ticket_id} not found.\n"
+                f"Ticket {escape_markdown(ticket_id)} not found.\n"
                 "Please check the ticket ID and try again."
             )
             return
@@ -84,14 +85,14 @@ async def ticket_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         response = await ai_service.send_message(prompt, [])
 
-        # Format final response
+        # Format final response with escaped dynamic values
         response_text = (
-            f"🎫 *{issue['key']}*: {issue['summary']}\n\n"
-            f"📊 *Status:* {issue['status']}\n"
-            f"⚡ *Priority:* {issue['priority']}\n"
-            f"👤 *Assignee:* {issue['assignee']}\n"
+            f"🎫 *{escape_markdown(issue['key'])}*: {escape_markdown(issue['summary'])}\n\n"
+            f"📊 *Status:* {escape_markdown(issue['status'])}\n"
+            f"⚡ *Priority:* {escape_markdown(issue['priority'])}\n"
+            f"👤 *Assignee:* {escape_markdown(issue['assignee'])}\n"
             f"🔗 [View in Jira]({issue['url']})\n\n"
-            f"*AI Summary:*\n{response.content}"
+            f"*AI Summary:*\n{escape_markdown(response.content)}"
         )
 
         await update.message.reply_text(
@@ -115,8 +116,8 @@ async def ticket_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             error=str(e),
         )
         await update.message.reply_text(
-            f"Sorry, I encountered an error while fetching ticket {ticket_id}:\n"
-            f"{str(e)}\n\n"
+            f"Sorry, I encountered an error while fetching ticket {escape_markdown(ticket_id)}:\n"
+            f"{escape_markdown(str(e))}\n\n"
             "Please check your Jira configuration and try again."
         )
 

@@ -11,6 +11,7 @@ from bot.services.redis_service import RedisService
 from bot.config import settings
 from bot.utils.auth import authorized_users_only
 from bot.models.repository import Repository
+from bot.utils.constants import escape_markdown
 
 logger = structlog.get_logger()
 
@@ -149,7 +150,7 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Resolve repository
         repo_url, repo_error = await resolve_repository(telegram_id, parsed)
         if not repo_url:
-            await update.message.reply_text(f"❌ {repo_error}")
+            await update.message.reply_text(f"❌ {escape_markdown(repo_error)}")
             return
 
         # Generate task ID
@@ -187,7 +188,7 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 else:
                     await update.message.reply_text(
-                        f"Warning: Jira ticket {parsed['jira_ticket']} not found. "
+                        f"Warning: Jira ticket {escape_markdown(parsed['jira_ticket'])} not found. "
                         "Proceeding without Jira details."
                     )
             except Exception as e:
@@ -198,7 +199,7 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     error=str(e)
                 )
                 await update.message.reply_text(
-                    f"Warning: Could not fetch Jira ticket {parsed['jira_ticket']}: {str(e)}\n"
+                    f"Warning: Could not fetch Jira ticket {escape_markdown(parsed['jira_ticket'])}: {escape_markdown(str(e))}\n"
                     "Proceeding without Jira details."
                 )
 
@@ -207,21 +208,21 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success = await redis_service.publish_task(task_data)
 
             if success:
-                # Format response message
+                # Format response message with escaped dynamic values
                 response_parts = [
                     f"🚀 *AI-Driven Workflow Started*",
                     f"",
-                    f"*Task ID:* `{task_id}`",
-                    f"*Workflow:* {task_data['workflow_name']}",
-                    f"*Repository:* {task_data['repo_url']}",
+                    f"*Task ID:* `{escape_markdown(task_id)}`",
+                    f"*Workflow:* {escape_markdown(task_data['workflow_name'])}",
+                    f"*Repository:* {escape_markdown(task_data['repo_url'])}",
                 ]
 
                 if task_data.get("jira_ticket"):
-                    response_parts.append(f"*Jira Ticket:* {task_data['jira_ticket']}")
+                    response_parts.append(f"*Jira Ticket:* {escape_markdown(task_data['jira_ticket'])}")
 
                 response_parts.extend([
                     f"",
-                    f"*Task:* {task_data['task_description']}",
+                    f"*Task:* {escape_markdown(task_data['task_description'])}",
                     f"",
                     f"I'll notify you when the workflow completes."
                 ])
@@ -253,7 +254,7 @@ async def adw_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             error=str(e)
         )
         await update.message.reply_text(
-            f"Sorry, I encountered an error processing your request:\n{str(e)}"
+            f"Sorry, I encountered an error processing your request:\n{escape_markdown(str(e))}"
         )
 
 
@@ -301,17 +302,17 @@ async def handle_adw_response(response_data: dict, application):
             logger.warning("Incomplete ADW response", data=response_data)
             return
 
-        # Format message based on status
+        # Format message based on status with escaped dynamic values
         if status == "started":
-            text = f"⚙️ *Workflow Started*\n\nTask ID: `{task_id}`\n{message}"
+            text = f"⚙️ *Workflow Started*\n\nTask ID: `{escape_markdown(task_id)}`\n{escape_markdown(message)}"
         elif status == "finished":
-            text = f"✅ *Workflow Completed*\n\nTask ID: `{task_id}`\n{message}"
+            text = f"✅ *Workflow Completed*\n\nTask ID: `{escape_markdown(task_id)}`\n{escape_markdown(message)}"
         elif status == "failed":
-            text = f"❌ *Workflow Failed*\n\nTask ID: `{task_id}`\n{message}"
+            text = f"❌ *Workflow Failed*\n\nTask ID: `{escape_markdown(task_id)}`\n{escape_markdown(message)}"
         elif status == "progress":
-            text = f"🔄 *Progress Update*\n\nTask ID: `{task_id}`\n{message}"
+            text = f"🔄 *Progress Update*\n\nTask ID: `{escape_markdown(task_id)}`\n{escape_markdown(message)}"
         else:
-            text = f"📝 *Update*\n\nTask ID: `{task_id}`\n{message}"
+            text = f"📝 *Update*\n\nTask ID: `{escape_markdown(task_id)}`\n{escape_markdown(message)}"
 
         # Send message to user
         await application.bot.send_message(

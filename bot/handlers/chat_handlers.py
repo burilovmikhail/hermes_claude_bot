@@ -9,6 +9,7 @@ from bot.services.conversation_service import ConversationService
 from bot.models.message import MessageRole
 from bot.config import settings
 from bot.utils.auth import authorized_users_only
+from bot.utils.constants import escape_markdown
 
 logger = structlog.get_logger()
 
@@ -93,14 +94,17 @@ async def _process_chat_message(
             tokens_used=response.tokens_used,
         )
 
+        # Escape markdown characters in AI response
+        escaped_content = escape_markdown(response.content)
+
         # Split response if it's too long (Telegram limit: 4096 characters)
         max_length = 4096
-        if len(response.content) <= max_length:
-            await update.message.reply_text(response.content)
+        if len(escaped_content) <= max_length:
+            await update.message.reply_text(escaped_content)
         else:
             # Split into chunks
-            for i in range(0, len(response.content), max_length):
-                chunk = response.content[i : i + max_length]
+            for i in range(0, len(escaped_content), max_length):
+                chunk = escaped_content[i : i + max_length]
                 await update.message.reply_text(chunk)
 
         logger.info(
@@ -118,7 +122,7 @@ async def _process_chat_message(
             error=str(e),
         )
         await update.message.reply_text(
-            f"Sorry, I encountered an error: {str(e)}\n"
+            f"Sorry, I encountered an error: {escape_markdown(str(e))}\n"
             "Please try again later or use /new to start a fresh conversation."
         )
 
