@@ -409,8 +409,8 @@ async def handle_git_response(response_data: dict, application):
             text = f"✅ {escape_markdown(message)}"
             # Include prime output if available
             if prime_output:
-                text += f"\n\n*Prime Output:*\n```\n{escape_markdown(prime_output[:1000])}\n```"
-                if len(prime_output) > 1000:
+                text += f"\n\n*Prime Output:*\n```\n{prime_output[:2000]}\n```"
+                if len(prime_output) > 2000:
                     text += "\n_(Output truncated)_"
         elif status == "failed":
             text = f"❌ {escape_markdown(message)}"
