@@ -404,6 +404,8 @@ async def handle_git_response(response_data: dict, application):
             except Exception as e:
                 logger.error("Failed to update repository status", error=str(e))
 
+        print(f"git response: {operation}, status={status}, output={prime_output}")
+
         # Format message based on status with escaped dynamic values
         if status == "success":
             text = f"✅ {escape_markdown(message)}"

@@ -773,7 +773,6 @@ class WorkerService:
                 # Handle response
                 if response.success:
                     prime_output = response.output
-                    print(f"Prime output: {prime_output}")
 
                     await self.send_git_response(
                         task_id,
