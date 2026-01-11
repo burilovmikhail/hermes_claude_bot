@@ -273,7 +273,7 @@ async def handle_worker_response(response_data: dict, application):
         operation = response_data.get("operation", "adw")
 
         # Route to appropriate handler
-        if operation in ["git_clone", "git_pull"]:
+        if operation in ["git_add", "git_remove"]:
             # Import here to avoid circular dependency
             from bot.handlers.git_handlers import handle_git_response
             await handle_git_response(response_data, application)
