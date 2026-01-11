@@ -27,7 +27,7 @@ class GitCommandParser:
 
         Returns:
             Dictionary with parsed parameters:
-            - operation: 'add' or 'list' or None
+            - operation: 'add' or 'list' or 'remove' or None
             - short_name: Short name for repository (e.g., 'backend')
             - jira_prefix: Jira project prefix (e.g., 'MS', 'PROJ')
             - repo_url: Repository URL (short or full form)
@@ -35,7 +35,7 @@ class GitCommandParser:
         """
         system_prompt = """You are a Git command parser. Analyze the user's command and extract structured information.
 
-Supported operations: 'add', 'list'
+Supported operations: 'add', 'list', 'remove'
 
 For 'add' operation, extract:
 1. short_name: A short memorable name for the repository (e.g., 'backend', 'frontend', 'api')
@@ -48,9 +48,13 @@ For 'add' operation, extract:
 For 'list' operation:
 No additional parameters needed - just list all registered repositories
 
+For 'remove' operation, extract:
+1. short_name: The short name of the repository to remove (e.g., 'backend', 'api')
+Alternative command names: 'rm', 'delete' should map to 'remove' operation
+
 Return JSON in this exact format:
 {
-    "operation": "add" or "list" or null,
+    "operation": "add" or "list" or "remove" or null,
     "short_name": "extracted name" or null,
     "jira_prefix": "extracted prefix" or null,
     "repo_url": "extracted url" or null,
@@ -70,6 +74,15 @@ Output: {"operation": "list", "short_name": null, "jira_prefix": null, "repo_url
 
 Input: "add api PROJ https://github.com/myorg/api-service.git"
 Output: {"operation": "add", "short_name": "api", "jira_prefix": "PROJ", "repo_url": "myorg/api-service", "error": null}
+
+Input: "remove backend"
+Output: {"operation": "remove", "short_name": "backend", "jira_prefix": null, "repo_url": null, "error": null}
+
+Input: "rm api"
+Output: {"operation": "remove", "short_name": "api", "jira_prefix": null, "repo_url": null, "error": null}
+
+Input: "delete the backend repository"
+Output: {"operation": "remove", "short_name": "backend", "jira_prefix": null, "repo_url": null, "error": null}
 
 If you cannot determine the operation or required fields are missing, set error field with explanation."""
 
@@ -177,5 +190,27 @@ If you cannot determine the operation or required fields are missing, set error 
 
         if parsed_data.get("operation") != "list":
             return False, "Operation must be 'list'"
+
+        return True, None
+
+    @staticmethod
+    def validate_remove_data(parsed_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+        """
+        Validate parsed data for remove operation.
+
+        Args:
+            parsed_data: Parsed command data
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if parsed_data.get("error"):
+            return False, parsed_data["error"]
+
+        if parsed_data.get("operation") != "remove":
+            return False, "Operation must be 'remove'"
+
+        if not parsed_data.get("short_name"):
+            return False, "Missing required field: short_name"
 
         return True, None

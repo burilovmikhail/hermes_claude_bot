@@ -33,11 +33,13 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Supports:
     - /git add <short_name> <jira_prefix> <repo_url>
     - /git list
+    - /git remove <short_name>
 
     Usage examples:
       /git add backend MS EcorRouge/mcguire-sponsel-backend
       /git add api PROJ https://github.com/myorg/api-service
       /git list
+      /git remove backend
     """
     user = update.effective_user
     telegram_id = user.id
@@ -50,11 +52,13 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Please provide a git command.\n\n"
             "Usage:\n"
             "  /git add <short_name> <jira_prefix> <repo_url>\n"
-            "  /git list\n\n"
+            "  /git list\n"
+            "  /git remove <short_name>\n\n"
             "Examples:\n"
             "  /git add backend MS EcorRouge/backend-api\n"
             "  /git add api PROJ github.com/myorg/api-service\n"
-            "  /git list"
+            "  /git list\n"
+            "  /git remove backend"
         )
         return
 
@@ -78,13 +82,16 @@ async def git_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_add(update, telegram_id, parsed)
         elif operation == "list":
             await handle_list(update, telegram_id, parsed)
+        elif operation == "remove":
+            await handle_remove(update, telegram_id, parsed)
         else:
             error_msg = parsed.get("error", "Could not determine git operation")
             await update.message.reply_text(
                 f"❌ Invalid command: {escape_markdown(error_msg)}\n\n"
                 "Please use:\n"
                 "  /git add <short_name> <jira_prefix> <repo_url>\n"
-                "  /git list"
+                "  /git list\n"
+                "  /git remove <short_name>"
             )
 
     except Exception as e:
@@ -267,6 +274,97 @@ async def handle_list(update: Update, telegram_id: int, parsed: dict):
         telegram_id=telegram_id,
         count=len(repos)
     )
+
+
+async def handle_remove(update: Update, telegram_id: int, parsed: dict):
+    """
+    Handle git remove operation.
+
+    Args:
+        update: Telegram update
+        telegram_id: User's Telegram ID
+        parsed: Parsed command data
+    """
+    # Validate parsed data
+    is_valid, error_msg = GitCommandParser.validate_remove_data(parsed)
+    if not is_valid:
+        await update.message.reply_text(
+            f"❌ Invalid remove command: {escape_markdown(error_msg)}\n\n"
+            "Required: /git remove <short_name>\n"
+            "Example: /git remove backend"
+        )
+        return
+
+    short_name = parsed["short_name"]
+
+    # Check if repository exists for this user
+    repo = await Repository.find_one(
+        Repository.telegram_id == telegram_id,
+        Repository.short_name == short_name
+    )
+
+    if not repo:
+        await update.message.reply_text(
+            f"❌ Repository '{escape_markdown(short_name)}' not found.\n\n"
+            "Use `/git list` to see your registered repositories.",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Delete repository from MongoDB
+    repo_id = str(repo.id)
+    repo_url = repo.repo_url
+    await repo.delete()
+
+    logger.info(
+        "Repository deleted from database",
+        telegram_id=telegram_id,
+        short_name=short_name,
+        repo_id=repo_id
+    )
+
+    # Queue task to worker to remove filesystem directory
+    if redis_service:
+        task_id = str(uuid.uuid4())
+        task_data = {
+            "task_id": task_id,
+            "telegram_id": telegram_id,
+            "operation": "git_remove",
+            "repo_id": repo_id,
+            "short_name": short_name,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        success = await redis_service.publish_task(task_data)
+
+        if success:
+            await update.message.reply_text(
+                f"🗑️ *Removing Repository*\n\n"
+                f"*Short Name:* {escape_markdown(short_name)}\n"
+                f"*Repository:* {escape_markdown(repo_url)}\n\n"
+                f"⚠️ This action is permanent. The repository record has been deleted and the filesystem cleanup is in progress.\n\n"
+                f"You'll be notified when the cleanup is complete.",
+                parse_mode="Markdown"
+            )
+
+            logger.info(
+                "Remove task queued",
+                task_id=task_id,
+                telegram_id=telegram_id,
+                short_name=short_name
+            )
+        else:
+            await update.message.reply_text(
+                f"✅ Repository '{escape_markdown(short_name)}' deleted from database.\n\n"
+                "⚠️ Failed to queue filesystem cleanup task. The directory may still exist on the worker.",
+                parse_mode="Markdown"
+            )
+    else:
+        await update.message.reply_text(
+            f"✅ Repository '{escape_markdown(short_name)}' deleted from database.\n\n"
+            "⚠️ Worker service is not available. The directory may still exist on the worker.",
+            parse_mode="Markdown"
+        )
 
 
 async def handle_git_response(response_data: dict, application):

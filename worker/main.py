@@ -116,6 +116,8 @@ class WorkerService:
         # Route to appropriate handler
         if operation == "git_add":
             await self.handle_git_add(task_data)
+        elif operation == "git_remove":
+            await self.handle_git_remove(task_data)
         else:
             await self.handle_adw_task(task_data)
 
@@ -733,6 +735,73 @@ class WorkerService:
             )
             logger.error("Add error", error=str(e))
 
+
+    async def handle_git_remove(self, task_data: dict):
+        """
+        Handle git remove operation (delete repository directory).
+
+        Args:
+            task_data: Task data from Redis queue
+        """
+        task_id = task_data.get("task_id")
+        telegram_id = task_data.get("telegram_id")
+        short_name = task_data.get("short_name")
+        repo_id = task_data.get("repo_id")
+
+        logger.info("Removing repository", task_id=task_id, short_name=short_name)
+
+        try:
+            # Construct repository directory path
+            repo_dir = self.workspace / str(telegram_id) / short_name
+
+            # Check if directory exists
+            if repo_dir.exists():
+                logger.info("Removing repository directory", path=repo_dir)
+
+                # Remove directory recursively
+                shutil.rmtree(repo_dir)
+
+                await self.send_git_response(
+                    task_id,
+                    telegram_id,
+                    "success",
+                    f"Repository '{short_name}' removed successfully (database and filesystem)",
+                    "git_remove",
+                    repo_id
+                )
+                logger.info("Repository removed successfully", short_name=short_name)
+            else:
+                # Directory doesn't exist, but that's okay
+                logger.warning("Repository directory not found, already cleaned up", path=repo_dir)
+                await self.send_git_response(
+                    task_id,
+                    telegram_id,
+                    "success",
+                    f"Repository '{short_name}' removed from database (directory was already cleaned up)",
+                    "git_remove",
+                    repo_id
+                )
+
+        except PermissionError as e:
+            await self.send_git_response(
+                task_id,
+                telegram_id,
+                "failed",
+                f"Permission denied while removing '{short_name}': {str(e)}",
+                "git_remove",
+                repo_id
+            )
+            logger.error("Permission error removing repository", short_name=short_name, error=str(e))
+        except Exception as e:
+            await self.send_git_response(
+                task_id,
+                telegram_id,
+                "failed",
+                f"Failed to remove '{short_name}': {str(e)}",
+                "git_remove",
+                repo_id
+            )
+            logger.error("Error removing repository", short_name=short_name, error=str(e))
 
     async def send_git_response(
         self,
