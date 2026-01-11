@@ -420,7 +420,7 @@ class WorkerService:
 
         try:
             if repo_dir.exists():
-                # Repository already exists, pull latest
+                # Repository already exists, switch to main branch and pull latest
                 logger.info("Updating repository", repo=github_repo)
                 await self.send_status(
                     task_id,
@@ -429,16 +429,76 @@ class WorkerService:
                     f"Updating repository: {github_repo}"
                 )
 
-                result = subprocess.run(
-                    ["git", "pull"],
-                    cwd=repo_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
+                try:
+                    # Switch to main branch first
+                    logger.info("Switching to main branch", repo=github_repo)
+                    await self.send_status(
+                        task_id,
+                        telegram_id,
+                        "progress",
+                        f"Switching to main branch: {github_repo}"
+                    )
 
-                if result.returncode != 0:
-                    raise Exception(f"Git pull failed: {result.stderr}")
+                    checkout_result = subprocess.run(
+                        ["git", "checkout", "main"],
+                        cwd=repo_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=60
+                    )
+
+                    if checkout_result.returncode != 0:
+                        raise Exception(f"Git checkout failed: {checkout_result.stderr}")
+
+                    # Pull latest changes
+                    pull_result = subprocess.run(
+                        ["git", "pull"],
+                        cwd=repo_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=60
+                    )
+
+                    if pull_result.returncode != 0:
+                        raise Exception(f"Git pull failed: {pull_result.stderr}")
+
+                except Exception as git_error:
+                    # Git operations failed, remove directory and re-clone
+                    logger.warning(
+                        "Git operations failed, removing and re-cloning",
+                        repo=github_repo,
+                        error=str(git_error)
+                    )
+                    await self.send_status(
+                        task_id,
+                        telegram_id,
+                        "progress",
+                        f"Recovering repository: {github_repo}"
+                    )
+
+                    shutil.rmtree(repo_dir)
+
+                    # Fall through to clone logic below
+                    logger.info("Cloning repository after recovery", repo=github_repo)
+                    await self.send_status(
+                        task_id,
+                        telegram_id,
+                        "progress",
+                        f"Cloning repository: {github_repo}"
+                    )
+
+                    # Prepare git URL with token
+                    repo_url = f"https://{settings.github_token}@github.com/{github_repo}.git"
+
+                    result = subprocess.run(
+                        ["git", "clone", repo_url, str(repo_dir)],
+                        capture_output=True,
+                        text=True,
+                        timeout=300
+                    )
+
+                    if result.returncode != 0:
+                        raise Exception(f"Git clone failed: {result.stderr}")
             else:
                 # Clone repository
                 logger.info("Cloning repository", repo=github_repo)
