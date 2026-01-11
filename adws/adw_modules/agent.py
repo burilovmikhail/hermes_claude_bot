@@ -62,6 +62,35 @@ def parse_jsonl_output(
         return [], None
 
 
+def extract_assistant_text_from_messages(messages: List[Dict[str, Any]]) -> str:
+    """Extract and concatenate text content from assistant messages.
+
+    Args:
+        messages: List of message dictionaries from JSONL output
+
+    Returns:
+        Concatenated text from all assistant messages, or empty string if none found
+    """
+    assistant_texts = []
+
+    for msg in messages:
+        # Look for assistant-type messages
+        if msg.get("type") == "assistant":
+            # Get the message content
+            message_content = msg.get("message", {})
+            content_array = message_content.get("content", [])
+
+            # Extract text from content array
+            for content_item in content_array:
+                if isinstance(content_item, dict) and content_item.get("type") == "text":
+                    text = content_item.get("text", "")
+                    if text.strip():
+                        assistant_texts.append(text.strip())
+
+    # Join all texts with double newlines for readability
+    return "\n\n".join(assistant_texts) if assistant_texts else ""
+
+
 def convert_jsonl_to_json(jsonl_file: str) -> str:
     """Convert JSONL file to JSON array file.
 
@@ -210,26 +239,35 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
                 # Check if there was an error in the result
                 is_error = result_message.get("is_error", False)
                 subtype = result_message.get("subtype", "")
-                
+
                 # Handle error_during_execution case where there's no result field
                 if subtype == "error_during_execution":
                     error_msg = "Error during execution: Agent encountered an error and did not return a result"
                     return AgentPromptResponse(
                         output=error_msg, success=False, session_id=session_id
                     )
-                
+
                 result_text = result_message.get("result", "")
 
                 return AgentPromptResponse(
                     output=result_text, success=not is_error, session_id=session_id
                 )
             else:
-                # No result message found, return raw output
-                with open(request.output_file, "r") as f:
-                    raw_output = f.read()
-                return AgentPromptResponse(
-                    output=raw_output, success=True, session_id=None
-                )
+                # No result message found, extract text from assistant messages
+                assistant_text = extract_assistant_text_from_messages(messages)
+
+                # If we extracted assistant text, return it
+                if assistant_text:
+                    return AgentPromptResponse(
+                        output=assistant_text, success=True, session_id=None
+                    )
+                else:
+                    # Fallback to raw output if no assistant messages found
+                    with open(request.output_file, "r") as f:
+                        raw_output = f.read()
+                    return AgentPromptResponse(
+                        output=raw_output, success=True, session_id=None
+                    )
         else:
             error_msg = f"Claude Code error: {result.stderr}"
             print(error_msg, file=sys.stderr)
