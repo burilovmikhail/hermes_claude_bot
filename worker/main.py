@@ -76,9 +76,9 @@ class WorkerService:
             if category is None:
                 category = MessageFilter.categorize_message(message)
 
-            # Always send started, finished, and failed status messages
-            # Only filter progress messages
-            if status == "progress":
+            # Filter progress and started messages based on reporting level
+            # Always send finished and failed status messages
+            if status in ("progress", "started"):
                 if not MessageFilter.should_send_message(message, reporting_level, category):
                     logger.debug(
                         "Filtered message",

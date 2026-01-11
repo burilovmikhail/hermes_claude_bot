@@ -147,9 +147,7 @@ def finalize_git_operations(state: 'ADWState', logger: logging.Logger, task_data
             from adw_modules.workflow_ops import create_pull_request
             pr_url, error = create_pull_request(branch_name, issue, state, logger)
 
-            if pr_url:
-                logger.info(f"Created PR: {pr_url}")
-            else:
+            if not pr_url:
                 logger.error(f"Failed to create PR: {error}")
         except Exception as e:
             logger.error(f"Failed to create PR: {e}")
