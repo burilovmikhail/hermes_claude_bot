@@ -10,6 +10,8 @@ from redis.exceptions import RedisError
 
 from config import settings
 from reporting import MessageFilter, MessageCategory, ReportingLevel
+from adws.adw_modules.agent import prompt_claude_code
+from adws.adw_modules.data_types import AgentPromptRequest, AgentPromptResponse
 
 # Setup logging
 structlog.configure(
@@ -646,18 +648,37 @@ class WorkerService:
 
             logger.info("Repository cloned successfully, running /prime", repo_url=repo_url)
 
-            # Run Claude Code with /prime command
+            # Run Claude Code with /prime command using agent module
             try:
-                prime_result = subprocess.run(
-                    ["claude", "prime"],
-                    cwd=str(repo_dir),
-                    capture_output=True,
-                    text=True,
-                    timeout=300
+                # Create output directory for prime JSONL files
+                prime_dir = repo_dir / "prime"
+                prime_dir.mkdir(exist_ok=True)
+                output_file = str(prime_dir / "prime_output.jsonl")
+
+                # Build AgentPromptRequest
+                request = AgentPromptRequest(
+                    prompt="/prime",
+                    adw_id=task_id,
+                    agent_name="git_prime",
+                    model="sonnet",
+                    dangerously_skip_permissions=True,
+                    output_file=output_file
                 )
 
-                if prime_result.returncode == 0:
-                    prime_output = prime_result.stdout.strip()
+                logger.info("Running prime with agent module", output_file=output_file)
+
+                # Change to repository directory and run prime
+                original_cwd = os.getcwd()
+                os.chdir(str(repo_dir))
+
+                try:
+                    response = prompt_claude_code(request)
+                finally:
+                    os.chdir(original_cwd)
+
+                # Handle response
+                if response.success:
+                    prime_output = response.output
                     await self.send_git_response(
                         task_id,
                         telegram_id,
@@ -667,9 +688,9 @@ class WorkerService:
                         repo_id,
                         prime_output
                     )
-                    logger.info("Repository primed successfully", repo_url=repo_url)
+                    logger.info("Repository primed successfully", repo_url=repo_url, session_id=response.session_id)
                 else:
-                    error_msg = prime_result.stderr or "Prime failed"
+                    error_msg = response.output or "Prime failed"
                     await self.send_git_response(
                         task_id,
                         telegram_id,
@@ -680,16 +701,16 @@ class WorkerService:
                     )
                     logger.error("Prime failed", error=error_msg)
 
-            except subprocess.TimeoutExpired:
+            except Exception as e:
                 await self.send_git_response(
                     task_id,
                     telegram_id,
                     "failed",
-                    "Repository cloned but prime operation timed out",
+                    f"Repository cloned but prime operation failed: {str(e)}",
                     "git_add",
                     repo_id
                 )
-                logger.error("Prime timeout", repo_url=repo_url)
+                logger.error("Prime exception", repo_url=repo_url, error=str(e))
 
         except subprocess.TimeoutExpired:
             await self.send_git_response(
