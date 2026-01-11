@@ -9,7 +9,7 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from config import settings
-from worker.reporting import MessageFilter, MessageCategory, ReportingLevel
+from .reporting import MessageFilter, MessageCategory, ReportingLevel
 
 # Setup logging
 structlog.configure(
