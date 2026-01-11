@@ -216,8 +216,8 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
                     error_msg = "Error during execution: Agent encountered an error and did not return a result"
                     return AgentPromptResponse(
                         output=error_msg, success=False, session_id=session_id
-                    )
-                
+                    )                
+
                 result_text = result_message.get("result", "")
 
                 return AgentPromptResponse(
